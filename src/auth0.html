@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Glia Client Engineer Tools</title>
+    <link rel="stylesheet" href="./src/css/style.css">
+    <link rel="stylesheet" href="./src/css/automations.css">
+    <link rel="stylesheet" href="./src/css/tool-page.css">
+    <script async src="https://api.glia.com/salemove_integration.js"></script>
+    <script type="text/javascript" src="//libs.glia.com/axon.js"></script>
+    <script src="./src/js/automations.js" defer></script> <!--Not added currently to this repo-->
+</head>
+
+<body>
+    <header class="header">
+        <div class="header-content">
+            <a href="./index.html" class="back-link">← Back to Dashboard</a>
+            <span class="team-badge">Team Dashboard</span>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="tool-header">
+            <div class="tool-icon-large">🤖</div>
+            <div>
+                <h1>Ticket Automation</h1>
+                <p>Automated request execution</p>
+            </div>
+        </div>
+
+        <section class="panel">
+            <h2>Requests to complete</h2>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Ticket</th>
+                        <th>Priority</th>
+                        <th>Request Type</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="ticketTableBody">
+                </tbody>
+            </table>
+        </section>
+
+        <div class="tool-layout" style="margin-top: 30px;">
+            <section class="panel" style="grid-column: 1 / -1;">
+                <h2>Output</h2>
+                <div class="output-container">
+                    <div class="output-header">
+                        <span class="output-status">Ready</span>
+                        <button class="btn btn-small" id="clear-output">Clear</button>
+                    </div>
+                    <pre class="output-console" id="output">Waiting for script execution... Select a script and click "Run Script" to begin.</pre>
+                </div>
+            </section>
+        </div>
+
+    <!-- Removed the recent execution sections, since this will be moved to audit-logs.html -->
+
+    <footer class="footer">
+        <p>Internal Tools v1.0 · For authorized team members only</p>
+    </footer>
+
+</body>
+
+</html>
