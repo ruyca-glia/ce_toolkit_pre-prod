@@ -198,29 +198,84 @@
     }
 
     // ---- CSV export -------------------------------------------------------
-    function exportCsv() {
-        if (!state.filtered.length) return;
-
+    // NOTE: this applet runs inside a sandboxed iframe whose `sandbox` attribute
+    // lacks `allow-downloads`, so a Blob + <a download> file download is blocked
+    // by the browser (and popups can't escape the sandbox to download either).
+    // We therefore copy the CSV to the clipboard, with a manual-copy modal as a
+    // fallback. For a true downloadable file, generate it server-side in a Glia
+    // Function (e.g. write to S3, return a presigned URL the user opens in a
+    // normal browser tab) — see the chat notes.
+    function buildCsv(logs) {
         const cols = ['timestamp', 'userId', 'automation', 'action', 'url'];
-        const escape = (v) => {
+        const esc = (v) => {
             const s = String(v ?? '');
             return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
         };
-        const rows = [
+        return [
             cols.join(','),
-            ...state.filtered.map((log) => cols.map((c) => escape(log[c])).join(',')),
-        ];
+            ...logs.map((log) => cols.map((c) => esc(log[c])).join(',')),
+        ].join('\n');
+    }
 
-        const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-        a.href = url;
-        a.download = `audit-logs-${stamp}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
+    async function exportCsv() {
+        if (!state.filtered.length) {
+            toast('Nothing to export — no rows match the current filters.');
+            return;
+        }
+        const csv = buildCsv(state.filtered);
+        try {
+            await navigator.clipboard.writeText(csv);
+            toast(`Copied ${state.filtered.length} row(s) as CSV to your clipboard.`);
+        } catch (err) {
+            // Clipboard API unavailable/blocked — fall back to manual copy.
+            showCsvFallback(csv);
+        }
+    }
+
+    // Lightweight toast confirmation.
+    let toastTimer;
+    function toast(message) {
+        let node = document.getElementById('toast');
+        if (!node) {
+            node = document.createElement('div');
+            node.id = 'toast';
+            node.className = 'toast';
+            node.setAttribute('role', 'status');
+            document.body.appendChild(node);
+        }
+        node.textContent = message;
+        node.classList.add('is-visible');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => node.classList.remove('is-visible'), 3200);
+    }
+
+    // Fallback modal: read-only textarea the user can select-all and copy.
+    function showCsvFallback(csv) {
+        const overlay = document.createElement('div');
+        overlay.className = 'csv-modal-overlay';
+        overlay.innerHTML = `
+            <div class="csv-modal" role="dialog" aria-modal="true" aria-label="Copy CSV">
+                <p class="csv-modal-title">Copy the CSV below</p>
+                <p class="csv-modal-hint">Automatic copy was blocked. Select all (Ctrl/Cmd+A) and copy, then paste into a .csv file or a spreadsheet.</p>
+                <textarea class="csv-modal-text" readonly></textarea>
+                <div class="csv-modal-actions">
+                    <button type="button" class="btn btn-secondary" data-close>Close</button>
+                    <button type="button" class="btn btn-primary" data-copy>Select &amp; copy</button>
+                </div>
+            </div>`;
+        const ta = overlay.querySelector('.csv-modal-text');
+        ta.value = csv;
+        const close = () => overlay.remove();
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+        overlay.querySelector('[data-close]').addEventListener('click', close);
+        overlay.querySelector('[data-copy]').addEventListener('click', () => {
+            ta.focus();
+            ta.select();
+            try { document.execCommand('copy'); toast('Copied to clipboard.'); } catch (_) {}
+        });
+        document.body.appendChild(overlay);
+        ta.focus();
+        ta.select();
     }
 
     // ---- Events -----------------------------------------------------------

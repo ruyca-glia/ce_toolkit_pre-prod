@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="./css/style.css">
+    <!-- Critical inline style: guarantees state divs stay hidden even if the
+         main stylesheet fails to load (e.g. path issues inside the applet). -->
+    <style>.hidden { display: none !important; }</style>
     <title>CE Toolkit - Audit Logs</title>
     <script type="text/javascript" src="//libs.glia.com/axon.js"></script>
 </head>
@@ -72,7 +75,7 @@
                     <span class="result-count" id="result-count">—</span>
                     <div class="filters-actions">
                         <button type="button" class="btn btn-ghost" id="btn-clear">Clear filters</button>
-                        <button type="button" class="btn btn-secondary" id="btn-export">⤓ Export CSV</button>
+                        <button type="button" class="btn btn-secondary" id="btn-export">⎘ Copy as CSV</button>
                     </div>
                 </div>
             </section>
