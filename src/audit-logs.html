@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="./css/style.css">
-    <title>CE-Onboarding Tools</title>
+    <title>CE Toolkit - Audit Logs</title>
     <script type="text/javascript" src="//libs.glia.com/axon.js"></script>
 </head>
 <body>
@@ -20,18 +20,118 @@
         </header>
 
         <main class="container">
-            <h2>Recent Executions</h2>
+            <h2 class="section-title">Recent Executions</h2>
 
+            <!-- ============ Filter bar ============ -->
+            <section class="filters" aria-label="Log filters">
+                <div class="filters-row">
 
+                    <!-- Time period -->
+                    <div class="filter-group">
+                        <label class="filter-label">Time period</label>
+                        <div class="segmented" role="group" aria-label="Time period">
+                            <button type="button" class="segmented-btn is-active" data-preset="24h">Last 24h</button>
+                            <button type="button" class="segmented-btn" data-preset="7d">Last 7 days</button>
+                            <button type="button" class="segmented-btn" data-preset="30d">Last 30 days</button>
+                            <button type="button" class="segmented-btn" data-preset="custom">Custom</button>
+                        </div>
+                    </div>
+
+                    <!-- User -->
+                    <div class="filter-group">
+                        <label class="filter-label" for="filter-user">User</label>
+                        <input id="filter-user" class="filter-input" type="search"
+                               placeholder="Search by user…" autocomplete="off">
+                    </div>
+
+                    <!-- Automation (hardcoded for now) -->
+                    <div class="filter-group">
+                        <label class="filter-label" for="filter-automation">Automation</label>
+                        <select id="filter-automation" class="filter-select">
+                            <option value="all">All automations</option>
+                            <option value="Auth0 Automation">Auth0 Automation</option>
+                            <option value="Onboarding">Onboarding</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Custom date range (revealed when "Custom" is selected) -->
+                <div class="custom-range hidden" id="custom-range">
+                    <div class="filter-group">
+                        <label class="filter-label" for="filter-from">From</label>
+                        <input id="filter-from" class="filter-input" type="date">
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label" for="filter-to">To</label>
+                        <input id="filter-to" class="filter-input" type="date">
+                    </div>
+                </div>
+
+                <!-- Toolbar: result count + actions -->
+                <div class="filters-toolbar">
+                    <span class="result-count" id="result-count">—</span>
+                    <div class="filters-actions">
+                        <button type="button" class="btn btn-ghost" id="btn-clear">Clear filters</button>
+                        <button type="button" class="btn btn-secondary" id="btn-export">⤓ Export CSV</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============ Results ============ -->
+            <section class="results" aria-live="polite">
+
+                <!-- Loading state -->
+                <div class="state state-loading hidden" id="state-loading">
+                    <span class="spinner" aria-hidden="true"></span>
+                    <p>Loading logs…</p>
+                </div>
+
+                <!-- Error state -->
+                <div class="state state-error hidden" id="state-error">
+                    <span class="state-icon">⚠️</span>
+                    <p class="state-title">Couldn't load the logs</p>
+                    <p class="state-detail" id="error-detail">Something went wrong while fetching from the data store.</p>
+                    <button type="button" class="btn btn-secondary" id="btn-retry">Try again</button>
+                </div>
+
+                <!-- Empty state -->
+                <div class="state state-empty hidden" id="state-empty">
+                    <span class="state-icon">📭</span>
+                    <p class="state-title">No executions found</p>
+                    <p class="state-detail">No log entries match the current filters.</p>
+                </div>
+
+                <!-- Table -->
+                <div class="table-wrap hidden" id="table-wrap">
+                    <table class="logs-table">
+                        <thead>
+                            <tr>
+                                <th class="col-expand" aria-label="Expand"></th>
+                                <th class="col-time">Timestamp</th>
+                                <th class="col-user">User</th>
+                                <th class="col-automation">Automation</th>
+                                <th class="col-action">Action</th>
+                                <th class="col-url">URL</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logs-body"><!-- rows injected by audit-logs.js --></tbody>
+                    </table>
+                </div>
+
+                <!-- Load more -->
+                <div class="load-more-wrap hidden" id="load-more-wrap">
+                    <button type="button" class="btn btn-secondary" id="btn-load-more">Load more</button>
+                </div>
+
+            </section>
         </main>
 
     </div>
-
 
     <footer class="footer">
         <p>Internal Tools v1.0 · For authorized team members only</p>
     </footer>
 
+    <script src="./js/audit-logs.js"></script>
 </body>
 </html>
-

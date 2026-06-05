@@ -250,3 +250,390 @@ body {
 .hidden {
     display: none;
 }
+/* =========================================================================
+ * Audit Logs view
+ * ====================================================================== */
+
+:root {
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --radius: 8px;
+    --radius-sm: 6px;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* Back link (used in sub-page headers) */
+.back-link {
+    color: rgba(255, 255, 255, 0.85);
+    text-decoration: none;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    margin-right: auto;
+}
+
+.back-link:hover {
+    color: var(--white);
+    text-decoration: underline;
+}
+
+.section-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--gray-900);
+    margin-bottom: 1rem;
+}
+
+/* ---- Filter bar -------------------------------------------------------- */
+.filters {
+    background-color: var(--white);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.filters-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    align-items: flex-end;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    min-width: 180px;
+}
+
+.filter-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--gray-500);
+}
+
+.filter-input,
+.filter-select {
+    font: inherit;
+    font-size: 0.875rem;
+    color: var(--gray-900);
+    background-color: var(--white);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.625rem;
+    height: 38px;
+    width: 100%;
+}
+
+.filter-input:focus,
+.filter-select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(81, 15, 164, 0.12);
+}
+
+/* Segmented control for time presets */
+.segmented {
+    display: inline-flex;
+    background-color: var(--gray-100);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-sm);
+    padding: 3px;
+    gap: 2px;
+}
+
+.segmented-btn {
+    font: inherit;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--gray-700);
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    padding: 0.375rem 0.75rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.segmented-btn:hover {
+    color: var(--gray-900);
+}
+
+.segmented-btn.is-active {
+    background-color: var(--white);
+    color: var(--primary);
+    box-shadow: var(--shadow-sm);
+}
+
+/* Custom date range */
+.custom-range {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px dashed var(--gray-200);
+}
+
+.custom-range .filter-group {
+    min-width: 160px;
+}
+
+/* Toolbar: count + actions */
+.filters-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--gray-200);
+}
+
+.result-count {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--gray-500);
+}
+
+.filters-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* ---- Buttons ----------------------------------------------------------- */
+.btn {
+    font: inherit;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.875rem;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.btn-primary {
+    background-color: var(--primary);
+    color: var(--white);
+}
+
+.btn-primary:hover {
+    background-color: var(--primary-dark);
+}
+
+.btn-secondary {
+    background-color: var(--white);
+    color: var(--primary);
+    border-color: var(--gray-300);
+}
+
+.btn-secondary:hover {
+    border-color: var(--primary);
+    background-color: var(--gray-50);
+}
+
+.btn-ghost {
+    background: transparent;
+    color: var(--gray-500);
+}
+
+.btn-ghost:hover {
+    color: var(--gray-900);
+    background-color: var(--gray-100);
+}
+
+.btn:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+/* ---- Results table ----------------------------------------------------- */
+.table-wrap {
+    background-color: var(--white);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius);
+    overflow-x: auto;
+}
+
+.logs-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.logs-table thead th {
+    text-align: left;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--gray-500);
+    background-color: var(--gray-50);
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--gray-200);
+    white-space: nowrap;
+}
+
+.logs-table tbody td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--gray-100);
+    vertical-align: top;
+    color: var(--gray-700);
+}
+
+.log-row {
+    cursor: pointer;
+    transition: background-color 0.1s ease;
+}
+
+.log-row:hover {
+    background-color: var(--gray-50);
+}
+
+.log-row.is-open {
+    background-color: var(--gray-50);
+}
+
+.cell-mono {
+    font-family: var(--mono);
+    font-size: 0.8125rem;
+}
+
+.col-expand {
+    width: 32px;
+    text-align: center;
+}
+
+.expand-caret {
+    color: var(--gray-500);
+    font-size: 0.75rem;
+}
+
+.col-time {
+    white-space: nowrap;
+    color: var(--gray-900);
+}
+
+.col-url {
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--gray-500);
+}
+
+/* Automation badge */
+.badge {
+    display: inline-block;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    padding: 0.1875rem 0.5rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    background-color: var(--gray-100);
+    color: var(--gray-700);
+}
+
+.badge--auth0-automation {
+    background-color: rgba(81, 15, 164, 0.1);
+    color: var(--primary);
+}
+
+.badge--onboarding {
+    background-color: rgba(16, 185, 129, 0.12);
+    color: #047857;
+}
+
+/* Expanded detail panel */
+.log-detail-row td {
+    background-color: var(--gray-50);
+    padding: 0 1rem 1rem;
+}
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.375rem 1.5rem;
+    padding: 1rem;
+    background-color: var(--white);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-sm);
+}
+
+.detail-key {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.detail-val {
+    color: var(--gray-900);
+    word-break: break-all;
+}
+
+/* ---- States ------------------------------------------------------------ */
+.state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.5rem;
+    padding: 3rem 1.5rem;
+    background-color: var(--white);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius);
+}
+
+.state-icon {
+    font-size: 2rem;
+}
+
+.state-title {
+    font-weight: 600;
+    color: var(--gray-900);
+}
+
+.state-detail {
+    font-size: 0.875rem;
+    color: var(--gray-500);
+    max-width: 420px;
+}
+
+.state .btn {
+    margin-top: 0.5rem;
+}
+
+.spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid var(--gray-200);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ---- Load more --------------------------------------------------------- */
+.load-more-wrap {
+    display: flex;
+    justify-content: center;
+    margin-top: 1.25rem;
+}
+
+/* ---- Responsive -------------------------------------------------------- */
+@media (max-width: 640px) {
+    .filters-row { flex-direction: column; align-items: stretch; }
+    .filter-group { min-width: 0; }
+    .segmented { width: 100%; justify-content: space-between; }
+    .filters-toolbar { flex-direction: column; align-items: stretch; }
+    .filters-actions { justify-content: flex-end; }
+    .col-url { max-width: 140px; }
+}
