@@ -22,6 +22,12 @@
  * detail panel without any table changes.
  * ====================================================================== */
 
+/*
+  Invocation URI
+*/ 
+const INVOCATION_URI = "";
+
+
 (() => {
     'use strict';
 
@@ -382,33 +388,37 @@
      * can go into a FilterExpression — at which point applyFilters() can be
      * slimmed down or kept as a client-side refinement.
      * =================================================================== */
-    function fetchLogs() {
-        return new Promise((resolve) => {
-            setTimeout(() => resolve(getMockLogs()), 400); // simulate latency
-        });
-    }
+    async function fetchLogs() {
+        const INVOCATION_URI = "https://api.glia.com/integrations/a575c704-c6ba-4240-b9a5-f3b8e934bfcd/endpoint"; // Update with each new version
 
-    // ---- Mock data (remove once fetchLogs hits the real backend) ----------
-    function getMockLogs() {
-        const now = Date.now();
-        const ago = (mins) => new Date(now - mins * 60000).toISOString();
-        return [
-            { userId: 'jane.doe@glia.com',    timestamp: ago(12),    action: 'Grant Auth0 access',        url: 'https://glia.auth0.com/api/v2/users/auth0|123/roles', automation: 'Auth0 Automation' },
-            { userId: 'mark.li@glia.com',      timestamp: ago(48),    action: 'Revoke Auth0 access',       url: 'https://glia.auth0.com/api/v2/users/auth0|456/roles', automation: 'Auth0 Automation' },
-            { userId: 'jane.doe@glia.com',     timestamp: ago(95),    action: 'Create onboarding exercise', url: 'https://api.glia.com/onboarding/exercises',           automation: 'Onboarding' },
-            { userId: 'sofia.ramos@glia.com',  timestamp: ago(180),   action: 'Reset exercise progress',   url: 'https://api.glia.com/onboarding/progress/reset',      automation: 'Onboarding' },
-            { userId: 'mark.li@glia.com',      timestamp: ago(400),   action: 'Grant Auth0 access',        url: 'https://glia.auth0.com/api/v2/users/auth0|789/roles', automation: 'Auth0 Automation' },
-            { userId: 'sofia.ramos@glia.com',  timestamp: ago(1500),  action: 'List onboarding cohorts',   url: 'https://api.glia.com/onboarding/cohorts',             automation: 'Onboarding' },
-            { userId: 'jane.doe@glia.com',     timestamp: ago(2600),  action: 'Revoke Auth0 access',       url: 'https://glia.auth0.com/api/v2/users/auth0|321/roles', automation: 'Auth0 Automation' },
-            { userId: 'diego.cruz@glia.com',   timestamp: ago(4320),  action: 'Create onboarding exercise', url: 'https://api.glia.com/onboarding/exercises',           automation: 'Onboarding' },
-            { userId: 'mark.li@glia.com',      timestamp: ago(7200),  action: 'Grant Auth0 access',        url: 'https://glia.auth0.com/api/v2/users/auth0|654/roles', automation: 'Auth0 Automation' },
-            { userId: 'sofia.ramos@glia.com',  timestamp: ago(10080), action: 'Reset exercise progress',   url: 'https://api.glia.com/onboarding/progress/reset',      automation: 'Onboarding' },
-            { userId: 'diego.cruz@glia.com',   timestamp: ago(14400), action: 'Revoke Auth0 access',       url: 'https://glia.auth0.com/api/v2/users/auth0|987/roles', automation: 'Auth0 Automation' },
-            { userId: 'jane.doe@glia.com',     timestamp: ago(28800), action: 'List onboarding cohorts',   url: 'https://api.glia.com/onboarding/cohorts',             automation: 'Onboarding' },
-            { userId: 'mark.li@glia.com',      timestamp: ago(40320), action: 'Grant Auth0 access',        url: 'https://glia.auth0.com/api/v2/users/auth0|111/roles', automation: 'Auth0 Automation' },
-            { userId: 'diego.cruz@glia.com',   timestamp: ago(50400), action: 'Create onboarding exercise', url: 'https://api.glia.com/onboarding/exercises',           automation: 'Onboarding' },
-        ];
-    }
+
+        try { 
+            const glia = await window.getGliaApi({version: 'v1'});
+            const headers = await glia.getRequestHeaders();
+            headers['Content-Type'] = 'application/json';
+
+            const response = await fetch(INVOCATION_URI, {
+                method: "POST",
+                headers: headers, 
+                body: JSON.stringify({})
+            });
+
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err?.message ?? `Request failed with status ${response.status}`);
+            }
+        } catch (error) { 
+            console.error("Critical error: ", error);
+        }
+
+        const data = await response.json();
+
+        if (!data.success) {
+            throw new Error(data.error ?? "Glia Function returned an unsuccessful response");
+        }
+
+        return data.logs;
+    }       
 
     // ---- Init -------------------------------------------------------------
     wireEvents();
