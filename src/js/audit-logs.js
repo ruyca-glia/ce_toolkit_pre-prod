@@ -396,9 +396,10 @@
             throw new Error(err?.message ?? `Request failed with status ${response.status}`);
         }
         console.error("Critical error: ", error);
-    
+        
 
         const data = await response.json();
+        console.log(data);
 
         if (!data.success) {
             throw new Error(data.error ?? "Glia Function returned an unsuccessful response");
