@@ -22,12 +22,6 @@
  * detail panel without any table changes.
  * ====================================================================== */
 
-/*
-  Invocation URI
-*/ 
-const INVOCATION_URI = "";
-
-
 (() => {
     'use strict';
 
@@ -377,11 +371,6 @@ const INVOCATION_URI = "";
      * Replace the body with the real call once IAM/DynamoDB is unblocked.
      * Expected: resolve to an array of log objects (see shape at top of file).
      *
-     * Real implementation will roughly be:
-     *   const res = await fetch('<glia-function-endpoint>', { ... });
-     *   if (!res.ok) throw new Error(`Request failed: ${res.status}`);
-     *   return await res.json();
-     *
      * Note: time/user/automation filtering is done client-side here for the
      * mock. When wiring DynamoDB, the time window maps naturally to the
      * sort-key (KeyConditionExpression on timestamp#id) and automation/user
@@ -392,24 +381,22 @@ const INVOCATION_URI = "";
         const INVOCATION_URI = "https://api.glia.com/integrations/a575c704-c6ba-4240-b9a5-f3b8e934bfcd/endpoint"; // Update with each new version
 
 
-        try { 
-            const glia = await window.getGliaApi({version: 'v1'});
-            const headers = await glia.getRequestHeaders();
-            headers['Content-Type'] = 'application/json';
+        const glia = await window.getGliaApi({version: 'v1'});
+        const headers = await glia.getRequestHeaders();
+        headers['Content-Type'] = 'application/json';
 
-            const response = await fetch(INVOCATION_URI, {
-                method: "POST",
-                headers: headers, 
-                body: JSON.stringify({})
-            });
+        const response = await fetch(INVOCATION_URI, {
+            method: "POST",
+            headers: headers, 
+            body: JSON.stringify({})
+        });
 
-            if (!response.ok) {
-                const err = await response.json().catch(() => ({}));
-                throw new Error(err?.message ?? `Request failed with status ${response.status}`);
-            }
-        } catch (error) { 
-            console.error("Critical error: ", error);
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err?.message ?? `Request failed with status ${response.status}`);
         }
+        console.error("Critical error: ", error);
+    
 
         const data = await response.json();
 
