@@ -148,7 +148,12 @@ export async function onInvoke(request, env, kvStoreFactory) {
             );
         }
 
-        const logs = (raw.Items ?? []).map(unwrap);
+        const logs = (raw.Items ?? []).map((item) => {
+            const log = unwrap(item);
+            // Split the composite sort key into a clean ISO timestamp the UI can parse
+            log.timestamp = log["timestamp#id"]?.split("#")[0] ?? log.createdAt;
+            return log;
+        });
 
         // ── Return shaped exactly as audit-logs.js expects ────────────────────
         return new Response(

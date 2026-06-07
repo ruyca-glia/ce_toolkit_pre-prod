@@ -380,7 +380,6 @@
     async function fetchLogs() {
         const INVOCATION_URI = "https://api.glia.com/integrations/a575c704-c6ba-4240-b9a5-f3b8e934bfcd/endpoint"; // Update with each new version
 
-
         const glia = await window.getGliaApi({version: 'v1'});
         const headers = await glia.getRequestHeaders();
         headers['Content-Type'] = 'application/json';
