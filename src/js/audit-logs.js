@@ -395,9 +395,7 @@
         if (!response.ok) {
             const err = await response.json().catch(() => ({}));
             throw new Error(err?.message ?? `Request failed with status ${response.status}`);
-        }
-        console.error("Critical error: ", error);
-        
+        }        
 
         const data = await response.json();
         console.log(data);
