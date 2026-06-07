@@ -384,6 +384,7 @@
         const glia = await window.getGliaApi({version: 'v1'});
         const headers = await glia.getRequestHeaders();
         headers['Content-Type'] = 'application/json';
+        console.log(headers)
 
         const response = await fetch(INVOCATION_URI, {
             method: "POST",
