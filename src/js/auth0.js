@@ -1,6 +1,3 @@
-// ==========================================
-// 1. GLOBAL CONFIGURATION & STATE
-// ==========================================
 const outputConsole = document.getElementById('output');
 let latestIssues = [];
 let finalReport = "";
@@ -10,11 +7,7 @@ const jiraIssuesUrl = 'https://api.glia.com/integrations/0f9dd445-cc46-4fd0-8aac
 const auth0LookupUrl = 'https://api.glia.com/integrations/8c29e917-f94a-4639-bb8d-583882802ec1/endpoint';
 const auth0UserMgmtUrl = 'https://api.glia.com/integrations/62d4f67f-129c-44b1-9fa7-67822311b09b/endpoint';
 const auth0RoleSyncUrl = 'https://api.glia.com/integrations/1fa17d02-6d91-482a-8d4d-b8b122345cb7/endpoint';
-const kvStoreUrl = 'https://api.glia.com/integrations/51a7d532-f34b-4f41-afea-9b966f64a9c6/endpoint'; 
-
-// ==========================================
-// 2. DATA PARSING & BUSINESS RULES (HELPERS)
-// ==========================================
+const kvStoreUrl = 'https://api.glia.com/integrations/51a7d532-f34b-4f41-afea-9b966f64a9c6/endpoint';
 
 function extractEmails(text) {
     if (!text) return [];
@@ -27,8 +20,8 @@ function calculateUserRoles(email, baseRoles, uatEmails, prodEmails) {
     const isGlia = email.endsWith('@glia.com');
 
     if (!isGlia) {
-        finalRoles = finalRoles.filter(role => 
-            !role.includes("internal_customer_success") && 
+        finalRoles = finalRoles.filter(role =>
+            !role.includes("internal_customer_success") &&
             !role.includes("internal_engineering_product")
         );
     }
@@ -55,32 +48,45 @@ function calculateUserMetadata(email, botCodesRaw, timezone, existingProfile = n
     };
 }
 
-// ==========================================
-// 3. INITIALIZATION & UI RENDERING
-// ==========================================
-
 document.addEventListener('DOMContentLoaded', () => {
     clearActivePanels();
-    getFunctionResponse();
+    getJiraTickets();
     fetchRecentExecutions(); // Load the KV Store table on load
 });
 
-async function getFunctionResponse() {
-    logOutput("Starting Glia API call to fetch Jira tickets...", true);
+async function getJiraTickets() {
+    logOutput("Starting Glia API to fetch Jira tickets...", true);
     try {
+        let userMail = "support@glia.com"; // Fallback email
         const glia = await window.getGliaApi({ version: 'v1' });
         const headers = await glia.getRequestHeaders();
         headers['Content-Type'] = 'application/json';
 
-        const response = await fetch(jiraIssuesUrl, { method: 'POST', headers: headers, body: JSON.stringify({}) });
+        try {
+            const gliaApi = await window.getGliaApi({ version: 'v1' });
+            const userData = await gliaApi.getUser();
+
+            if (userData && userData.email) {
+                userMail = userData.email;
+            }
+        } catch (error) {
+            console.warn("Could not retrieve Glia Operator info. Defaulting to fallback.", error);
+        }
+
+        const payload = {
+            userEmail: userMail
+        };
+
+
+        const response = await fetch(jiraIssuesUrl, { method: 'POST', headers: headers, body: JSON.stringify({payload}) });
         const result = await response.json();
         if (result.success) {
             latestIssues = result.issues;
             populateTicketTable(latestIssues);
             logOutput("Table successfully updated with Jira data.");
         }
-    } catch (error) { 
-        console.error("Critical error communicating with Jira API:", error); 
+    } catch (error) {
+        console.error("Critical error communicating with Jira API:", error);
     }
 }
 
@@ -141,10 +147,6 @@ function handleGoClick(index) {
     ticketRow.parentNode.insertBefore(collapsibleRow, ticketRow.nextSibling);
 }
 
-// ==========================================
-// 4. AUTOMATION LOGIC & SUMMARY TABLE
-// ==========================================
-
 async function handleTriggerClick(button, index) {
     const issue = latestIssues[index];
     const formData = issue.formData || {};
@@ -155,16 +157,16 @@ async function handleTriggerClick(button, index) {
     const botCodes = formData["Bot Code"] || "";
     const timezone = (Array.isArray(formData["Timezone"]) ? formData["Timezone"][0] : "UTC").split(" for ")[0];
 
-    const batchSummary = []; 
+    const batchSummary = [];
     button.disabled = true;
     finalReport = ""; // Reset final report string
-    
+
     logOutput(`========================================`, true);
     logOutput(`🚀 STARTING BATCH PROCESS FOR ${masterEmails.length} USERS`);
     logOutput(`Ticket: ${issue.key}`);
     logOutput(`========================================\n`);
 
-    let executionStatus = "Success"; 
+    let executionStatus = "Success";
 
     try {
         const glia = await window.getGliaApi({ version: 'v1' });
@@ -175,7 +177,7 @@ async function handleTriggerClick(button, index) {
             const email = masterEmails[i];
             const userNum = i + 1;
             let resultEntry = { email, action: "", status: "⌛" };
-            
+
             button.innerHTML = `Processing ${userNum}/${masterEmails.length}...`;
             logOutput(`[User ${userNum}/${masterEmails.length}] 📧 Email: ${email}`);
 
@@ -195,15 +197,15 @@ async function handleTriggerClick(button, index) {
                 resultEntry.action = "Creation";
                 await triggerUserCreation(userPackage, issue, headers);
             }
-            
+
             resultEntry.status = "✅";
             batchSummary.push(resultEntry);
             logOutput(`   -> ✅ Process completed!`);
             logOutput(`----------------------------------------`);
         }
-        
+
         logOutput(`\nBATCH JOB FINISHED`);
-        renderSummaryTable(batchSummary); 
+        renderSummaryTable(batchSummary);
 
         // Trigger KV Store Save Event
         await saveExecutionLog(issue.key, executionStatus, headers);
@@ -213,14 +215,14 @@ async function handleTriggerClick(button, index) {
         button.innerHTML = 'Retry';
         button.disabled = false;
         executionStatus = "Failed";
-        
+
         // Trigger KV Store Save Event for Failed executions too
         try {
             const glia = await window.getGliaApi({ version: 'v1' });
             const headers = await glia.getRequestHeaders();
             headers['Content-Type'] = 'application/json';
             await saveExecutionLog(issue.key, executionStatus, headers);
-        } catch(e) { console.error("Could not save failed log:", e); }
+        } catch (e) { console.error("Could not save failed log:", e); }
     }
 }
 
@@ -261,10 +263,6 @@ async function triggerUserCreation(user, issue, headers) {
     if (roleRes.ok) logOutput(`   -> Roles assigned successfully`);
 }
 
-// ==========================================
-// 5. KV STORE LOGIC (RECENT EXECUTIONS)
-// ==========================================
-
 async function saveExecutionLog(ticketKey, status, headers) {
     let operatorName = "Client Engineer"; // Fallback name
 
@@ -272,9 +270,7 @@ async function saveExecutionLog(ticketKey, status, headers) {
     try {
         const gliaApi = await window.getGliaApi({ version: 'v1' });
         const operatorData = await gliaApi.getUser();
-        
-        // Assuming the SDK returns an object with a 'name' attribute.
-        // Adjust '.name' if the Glia SDK returns it as '.firstName', '.displayName', etc.
+
         if (operatorData && operatorData.name) {
             operatorName = operatorData.name;
         }
@@ -296,10 +292,10 @@ async function saveExecutionLog(ticketKey, status, headers) {
 
         const res = await fetch(kvStoreUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
         const result = await res.json();
-        
+
         if (result.success) {
             console.log("KV Store: Log saved successfully.", result.logId);
-            fetchRecentExecutions(); 
+            fetchRecentExecutions();
         } else {
             console.error("KV Store Save Error:", result.error);
         }
@@ -314,12 +310,12 @@ async function fetchRecentExecutions() {
         const headers = await glia.getRequestHeaders();
         headers['Content-Type'] = 'application/json';
 
-        const res = await fetch(kvStoreUrl, { 
-            method: 'POST', 
-            headers, 
-            body: JSON.stringify({ action: "get_recent" }) 
+        const res = await fetch(kvStoreUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ action: "get_recent" })
         });
-        
+
         const data = await res.json();
         if (data.logs) {
             renderRecentExecutionsTable(data.logs);
@@ -332,7 +328,7 @@ async function fetchRecentExecutions() {
 function renderRecentExecutionsTable(logs) {
     const tbody = document.getElementById('recentExecutionsBody');
     if (!tbody) return;
-    tbody.innerHTML = ''; 
+    tbody.innerHTML = '';
 
     logs.forEach(log => {
         const dateObj = new Date(log.timestamp);
@@ -370,10 +366,6 @@ function renderRecentExecutionsTable(logs) {
     });
 }
 
-// ==========================================
-// 6. UTILITIES
-// ==========================================
-
 function handleApprovalCheck(checkbox) {
     const container = checkbox.closest('.details-container');
     const triggerButton = container.querySelector('.trigger-button');
@@ -392,7 +384,7 @@ function logOutput(msg, clear = false) {
     concatTexts(msg);
 }
 
-async function concatTexts(text){
+async function concatTexts(text) {
     try {
         finalReport += text + "\n";
         return true;
@@ -402,14 +394,14 @@ async function concatTexts(text){
     }
 }
 
-window.toggleDetails = function(button) {
+window.toggleDetails = function (button) {
     const currentRow = button.closest('tr');
-    const detailsRow = currentRow.nextElementSibling; 
+    const detailsRow = currentRow.nextElementSibling;
 
     if (detailsRow.style.display === 'none') {
         detailsRow.style.display = 'table-row';
         button.textContent = 'View Less';
-        button.classList.add('btn-active'); 
+        button.classList.add('btn-active');
     } else {
         detailsRow.style.display = 'none';
         button.textContent = 'View More';
