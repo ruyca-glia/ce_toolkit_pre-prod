@@ -12,36 +12,69 @@ export async function onInvoke(request, env, kvStoreFactory) {
         const sortKey    = now.toISOString() + "#" + uniqueId;
         const expiresAt  = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
 
+        // ---- Mock data for testing ---
+        // const logEntry = {
+        //     siteId:          "site_test_001",
+        //     "timestamp#id":  sortKey,
+        //     userId:          "jane.doe@glia.com",
+        //     action:          "Grant Auth0 access",
+        //     url:             "https://glia.auth0.com/api/v2/users/auth0|123/roles",
+        //     automation:      "Auth0 Automation",
+        //     status:          200,
+        //     durationMs:      143,
+        //     createdAt:       now.toISOString(),
+        //     expiresAt:       expiresAt,
+        // };
+
+                // Payload 
+        const { payload, invoker } = await request.json();
+
+        // Defensive: payload may arrive as a JSON string rather than an object,
+        // depending on how the invocation was made. Handle both.
+        const requestData = typeof payload === "string" ? JSON.parse(payload) : (payload ?? {});
+
+        const required = ["siteId", "userId", "action", "automation"];
+        const missing = required.filter((f) => !requestData[f]);
+        if (missing.length > 0) {
+            return new Response(
+                JSON.stringify({ success: false, error: `Missing required fields: ${missing.join(", ")}` }),
+                { status: 400, headers: { "Content-Type": "application/json" } }
+            );
+        }
+
         const logEntry = {
-            siteId:          "site_test_001",
-            "timestamp#id":  sortKey,
-            userId:          "jane.doe@glia.com",
-            action:          "Grant Auth0 access",
-            url:             "https://glia.auth0.com/api/v2/users/auth0|123/roles",
-            automation:      "Auth0 Automation",
-            status:          200,
-            durationMs:      143,
-            createdAt:       now.toISOString(),
-            expiresAt:       expiresAt,
+            siteId: requestData.siteId,           // REQUIERED
+            "timestamp#id": sortKey,
+            userId: requestData.userId,           // REQUIERED
+            action: requestData.action,           // REQUIERED
+            ticket: requestData.ticket,           // optional — skipped if absent
+            finalReport: requestData.finalReport, // optional — skipped if absent
+            url: requestData.url,                 // optional — skipped if absent
+            automation: requestData.automation,   // REQUIERED
+            status: requestData.status,           // optional — skipped if absent
+            durationMs: requestData.durationMs,   // optional — skipped if absent
+            invokerId: invoker?.id != null ? String(invoker.id) : undefined, // verified caller
+            invokerType: invoker?.type,           // e.g. "operator"
+            createdAt: now.toISOString(),
+            expiresAt: expiresAt,
         };
 
-        // ── Build the DynamoDB PutItem request body ───────────────────────────────
-        // DynamoDB requires each value to be wrapped in a type descriptor:
-        // { S: "string value" } for strings, { N: "123" } for numbers
+        // ── Build the DynamoDB PutItem request body ───────────────────────────
+        // DynamoDB requires each value wrapped in a type descriptor:
+        // { S: "string" } or { N: "123" }. Fields with no value are SKIPPED
+        // entirely — sending { S: undefined } serializes to {} and triggers
+        // "Supplied AttributeValue is empty" from DynamoDB.
+        const Item = {};
+        for (const [key, value] of Object.entries(logEntry)) {
+            if (value === undefined || value === null || value === "") continue;
+            Item[key] = typeof value === "number"
+                ? { N: String(value) }
+                : { S: String(value) };
+        }
+
         const dynamoItem = {
             TableName: tableName,
-            Item: {
-                "siteId":        { S: logEntry.siteId },
-                "timestamp#id":  { S: logEntry["timestamp#id"] },
-                "userId":        { S: logEntry.userId },
-                "action":        { S: logEntry.action },
-                "url":           { S: logEntry.url },
-                "automation":    { S: logEntry.automation },
-                "status":        { N: String(logEntry.status) },
-                "durationMs":    { N: String(logEntry.durationMs) },
-                "createdAt":     { S: logEntry.createdAt },
-                "expiresAt":     { N: String(logEntry.expiresAt) },
-            },
+            Item,
         };
 
         // ── AWS Signature V4 helpers ──────────────────────────────────────────────

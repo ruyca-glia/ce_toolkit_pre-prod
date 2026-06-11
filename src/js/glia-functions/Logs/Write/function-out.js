@@ -4,40 +4,59 @@ async function onInvoke(request, env, kvStoreFactory) {
     let toHex = function(buffer) {
       return Array.from(new Uint8Array(buffer)).map((b) => b.toString(16).padStart(2, "0")).join("");
     };
-    const accessKeyId = env.get("aws:accessKeyId");
-    const secretAccessKey = env.get("aws:secretAccessKey");
-    const region = env.get("region");
-    const tableName = env.get("tableName");
+    const accessKeyId = env["aws:accessKeyId"];
+    const secretAccessKey = env["aws:secretAccessKey"];
+    const region = env["region"];
+    const tableName = env["tableName"];
     const now = /* @__PURE__ */ new Date();
     const uniqueId = Math.random().toString(36).slice(2, 8);
     const sortKey = now.toISOString() + "#" + uniqueId;
     const expiresAt = Math.floor(Date.now() / 1e3) + 30 * 24 * 60 * 60;
+    const { payload, invoker } = await request.json();
+    const requestData = typeof payload === "string" ? JSON.parse(payload) : payload ?? {};
+    const required = ["siteId", "userId", "action", "automation"];
+    const missing = required.filter((f) => !requestData[f]);
+    if (missing.length > 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: `Missing required fields: ${missing.join(", ")}` }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
     const logEntry = {
-      siteId: "site_test_001",
+      siteId: requestData.siteId,
+      // REQUIERED
       "timestamp#id": sortKey,
-      userId: "jane.doe@glia.com",
-      action: "Grant Auth0 access",
-      url: "https://glia.auth0.com/api/v2/users/auth0|123/roles",
-      automation: "Auth0 Automation",
-      status: 200,
-      durationMs: 143,
+      userId: requestData.userId,
+      // REQUIERED
+      action: requestData.action,
+      // REQUIERED
+      ticket: requestData.ticket,
+      // optional — skipped if absent
+      finalReport: requestData.finalReport,
+      // optional — skipped if absent
+      url: requestData.url,
+      // optional — skipped if absent
+      automation: requestData.automation,
+      // REQUIERED
+      status: requestData.status,
+      // optional — skipped if absent
+      durationMs: requestData.durationMs,
+      // optional — skipped if absent
+      invokerId: invoker?.id != null ? String(invoker.id) : void 0,
+      // verified caller
+      invokerType: invoker?.type,
+      // e.g. "operator"
       createdAt: now.toISOString(),
       expiresAt
     };
+    const Item = {};
+    for (const [key, value] of Object.entries(logEntry)) {
+      if (value === void 0 || value === null || value === "") continue;
+      Item[key] = typeof value === "number" ? { N: String(value) } : { S: String(value) };
+    }
     const dynamoItem = {
       TableName: tableName,
-      Item: {
-        "siteId": { S: logEntry.siteId },
-        "timestamp#id": { S: logEntry["timestamp#id"] },
-        "userId": { S: logEntry.userId },
-        "action": { S: logEntry.action },
-        "url": { S: logEntry.url },
-        "automation": { S: logEntry.automation },
-        "status": { N: String(logEntry.status) },
-        "durationMs": { N: String(logEntry.durationMs) },
-        "createdAt": { S: logEntry.createdAt },
-        "expiresAt": { N: String(logEntry.expiresAt) }
-      }
+      Item
     };
     async function hmac(key, message) {
       const keyBytes = typeof key === "string" ? new TextEncoder().encode(key) : key;

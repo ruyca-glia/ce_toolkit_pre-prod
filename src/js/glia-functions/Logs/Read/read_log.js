@@ -8,11 +8,20 @@ export async function onInvoke(request, env, kvStoreFactory) {
         const region          = env["region"];
         const tableName       = env["tableName"];
 
-        // ── Query parameters (days defaults to 30 if not provided) ────────────
-        const params  = request.query ?? {};
-        const siteId  = params.siteId  ?? "site_test_001";
-        const days    = parseInt(params.days ?? "30", 10);
+        // ── Query parameters from the Glia invocation envelope ────────────────
+        const { payload } = await request.json();
+        const requestData = typeof payload === "string" ? JSON.parse(payload) : (payload ?? {});
 
+        const siteId = requestData.siteId;
+        const days   = parseInt(requestData.days ?? "30", 10);
+
+        if (!siteId) {
+            return new Response(
+                JSON.stringify({ success: false, error: "Missing required field: siteId" }),
+                { status: 400, headers: { "Content-Type": "application/json" } }
+            );
+        }
+        
         // ── Build the time range lower bound ──────────────────────────────────
         // Since the sort key starts with an ISO timestamp, a simple string
         // comparison works — "2026-05-01..." is lexicographically less than

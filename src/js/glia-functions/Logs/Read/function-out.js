@@ -15,9 +15,16 @@ async function onInvoke(request, env, kvStoreFactory) {
     const secretAccessKey = env["aws:secretAccessKey"];
     const region = env["region"];
     const tableName = env["tableName"];
-    const params = request.query ?? {};
-    const siteId = params.siteId ?? "site_test_001";
-    const days = parseInt(params.days ?? "30", 10);
+    const { payload } = await request.json();
+    const requestData = typeof payload === "string" ? JSON.parse(payload) : payload ?? {};
+    const siteId = requestData.siteId;
+    const days = parseInt(requestData.days ?? "30", 10);
+    if (!siteId) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Missing required field: siteId" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1e3).toISOString();
     const queryBody = {
       TableName: tableName,

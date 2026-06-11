@@ -387,10 +387,13 @@
 
         const response = await fetch(INVOCATION_URI, {
             method: "POST",
-            headers: headers, 
-            body: JSON.stringify({})
+            headers: headers,
+            body: JSON.stringify({
+                siteId: "42a8f124-f681-4673-be3d-9c3f1d349b1a", // CE Test Site, change later. 
+                days: 30
+            })
         });
-
+        
         if (!response.ok) {
             const err = await response.json().catch(() => ({}));
             throw new Error(err?.message ?? `Request failed with status ${response.status}`);
