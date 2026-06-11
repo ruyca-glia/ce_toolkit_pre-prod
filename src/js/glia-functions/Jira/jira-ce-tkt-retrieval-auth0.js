@@ -4,7 +4,7 @@ import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-sec
 async function onInvoke(request, env) {
   console.log("Started");
   //Credentials and Setup
-  const email = "carlos.gomez@glia.com";
+  const email = "carlos.gomez@glia.com"; //This will become an ENV Variable once decided the Jira user
   const apiToken = await getJiraToken(env);
   const auth = btoa(`${email}:${apiToken}`);
   const cloudID = "e38b3211-6df7-40d9-b425-80bff15a78c8";
@@ -36,7 +36,7 @@ async function onInvoke(request, env) {
     return Response.json({ error: "Failed to parse inner payload string" }, { status: 400 });
   }
 
-  const userEmail = (typeof body === 'object') ? (body.userEmail || body.email || body) : body;
+  const userEmail = body.userEmail;
   console.log(`Filtering Jira tickets for assignee: ${userEmail}`);
 
   /**

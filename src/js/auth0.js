@@ -78,7 +78,7 @@ async function getJiraTickets() {
         };
 
 
-        const response = await fetch(jiraIssuesUrl, { method: 'POST', headers: headers, body: JSON.stringify({payload}) });
+        const response = await fetch(jiraIssuesUrl, { method: 'POST', headers: headers, body: JSON.stringify(payload) });
         const result = await response.json();
         if (result.success) {
             latestIssues = result.issues;
