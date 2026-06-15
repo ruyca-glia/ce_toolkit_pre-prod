@@ -4,48 +4,15 @@ let finalReport = "";
 
 // Glia Function Invoke Endpoints
 const jiraIssuesUrl = 'https://api.glia.com/integrations/0f9dd445-cc46-4fd0-8aac-02bab77cd0e3/endpoint';
-const auth0LookupUrl = 'https://api.glia.com/integrations/8c29e917-f94a-4639-bb8d-583882802ec1/endpoint';
-const auth0UserMgmtUrl = 'https://api.glia.com/integrations/62d4f67f-129c-44b1-9fa7-67822311b09b/endpoint';
-const auth0RoleSyncUrl = 'https://api.glia.com/integrations/1fa17d02-6d91-482a-8d4d-b8b122345cb7/endpoint';
 const kvStoreUrl = 'https://api.glia.com/integrations/51a7d532-f34b-4f41-afea-9b966f64a9c6/endpoint';
+
+// NUEVO: Un solo endpoint maestro para Auth0
+const auth0ProvisioningUrl = 'URL_DE_TU_NUEVA_FUNCION_GRANT_GVA_PORTAL_ACCESS'; 
 
 function extractEmails(text) {
     if (!text) return [];
     const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(?:com|org|net|bank)/g;
     return (text.match(emailRegex) || []).map(email => email.toLowerCase().trim());
-}
-
-function calculateUserRoles(email, baseRoles, uatEmails, prodEmails) {
-    let finalRoles = [...baseRoles];
-    const isGlia = email.endsWith('@glia.com');
-
-    if (!isGlia) {
-        finalRoles = finalRoles.filter(role =>
-            !role.includes("internal_customer_success") &&
-            !role.includes("internal_engineering_product")
-        );
-    }
-    if (!uatEmails.includes(email)) finalRoles = finalRoles.filter(role => !role.includes("cms_exporter"));
-    if (!prodEmails.includes(email)) finalRoles = finalRoles.filter(role => !role.includes("cms_publisher"));
-
-    return finalRoles;
-}
-
-function calculateUserMetadata(email, botCodesRaw, timezone, existingProfile = null) {
-    const isGlia = email.endsWith('@glia.com');
-    const newCodes = botCodesRaw.split(',').map(s => s.trim()).filter(s => s !== "");
-
-    const existingClientIds = existingProfile?.user_metadata?.clientIds || [];
-    const existingCmsIds = existingProfile?.user_metadata?.portal?.cms || [];
-
-    const mergedClientIds = [...new Set([...existingClientIds, ...newCodes])];
-    const mergedCmsIds = [...new Set([...existingCmsIds, ...newCodes])];
-
-    return {
-        clientIds: isGlia ? [] : mergedClientIds,
-        portal: { cms: mergedCmsIds },
-        timezone: timezone
-    };
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -76,7 +43,6 @@ async function getJiraTickets() {
         const payload = {
             userEmail: userMail
         };
-
 
         const response = await fetch(jiraIssuesUrl, { method: 'POST', headers: headers, body: JSON.stringify(payload) });
         const result = await response.json();
@@ -150,59 +116,57 @@ function handleGoClick(index) {
 async function handleTriggerClick(button, index) {
     const issue = latestIssues[index];
     const formData = issue.formData || {};
-    const masterEmails = extractEmails(formData["User’s Full Name + User Email"]);
-    const uatEmails = extractEmails(formData["Users who should be able to export to UAT"]);
-    const prodEmails = extractEmails(formData["Users who should be able to publish to prod"]);
-    const baseRoles = formData["Roles needed to be added for Auth0"] || [];
-    const botCodes = formData["Bot Code"] || "";
-    const timezone = (Array.isArray(formData["Timezone"]) ? formData["Timezone"][0] : "UTC").split(" for ")[0];
+    
+    // Empaquetamos toda la data cruda para el backend
+    const payload = {
+        issueKey: issue.key,
+        masterEmails: extractEmails(formData["User’s Full Name + User Email"]),
+        uatEmails: extractEmails(formData["Users who should be able to export to UAT"]),
+        prodEmails: extractEmails(formData["Users who should be able to publish to prod"]),
+        baseRoles: formData["Roles needed to be added for Auth0"] || [],
+        botCodes: formData["Bot Code"] || "",
+        timezone: (Array.isArray(formData["Timezone"]) ? formData["Timezone"][0] : "UTC").split(" for ")[0]
+    };
 
-    const batchSummary = [];
     button.disabled = true;
-    finalReport = ""; // Reset final report string
+    finalReport = ""; 
 
     logOutput(`========================================`, true);
-    logOutput(`🚀 STARTING BATCH PROCESS FOR ${masterEmails.length} USERS`);
+    logOutput(`🚀 STARTING BATCH PROCESS FOR ${payload.masterEmails.length} USERS`);
     logOutput(`Ticket: ${issue.key}`);
     logOutput(`========================================\n`);
+    button.innerHTML = `Processing with Auth0...`;
 
     let executionStatus = "Success";
+    let batchSummary = [];
 
     try {
         const glia = await window.getGliaApi({ version: 'v1' });
         const headers = await glia.getRequestHeaders();
         headers['Content-Type'] = 'application/json';
 
-        for (let i = 0; i < masterEmails.length; i++) {
-            const email = masterEmails[i];
-            const userNum = i + 1;
-            let resultEntry = { email, action: "", status: "⌛" };
+        // 1 sola llamada al Backend Orquestador
+        const res = await fetch(auth0ProvisioningUrl, { 
+            method: 'POST', 
+            headers, 
+            body: JSON.stringify(payload) 
+        });
+        
+        const result = await res.json();
+        
+        if (!result.success) {
+            throw new Error(result.error || "Unknown error from Provisioning function");
+        }
 
-            button.innerHTML = `Processing ${userNum}/${masterEmails.length}...`;
-            logOutput(`[User ${userNum}/${masterEmails.length}] 📧 Email: ${email}`);
+        batchSummary = result.summary;
 
-            const lookupRes = await fetch(auth0LookupUrl, { method: 'POST', headers, body: JSON.stringify({ userEmail: email }) });
-            const lookupData = await lookupRes.json();
-
-            const userRoles = calculateUserRoles(email, baseRoles, uatEmails, prodEmails);
-            const userMetadata = calculateUserMetadata(email, botCodes, timezone, lookupData.found ? lookupData.profile : null);
-            const userPackage = { email, roles: userRoles, metadata: userMetadata, timezone };
-
-            if (lookupData.found) {
-                logOutput(`   -> User already exists. Merging metadata...`);
-                resultEntry.action = "Update";
-                await triggerUserUpdate(userPackage, lookupData.profile, issue, headers);
-            } else {
-                logOutput(`   -> User does not exist. Creating profile...`);
-                resultEntry.action = "Creation";
-                await triggerUserCreation(userPackage, issue, headers);
-            }
-
-            resultEntry.status = "✅";
-            batchSummary.push(resultEntry);
+        // Imprimimos los logs que el backend generó para conservar la UI en tiempo real
+        batchSummary.forEach((item, i) => {
+            logOutput(`[User ${i + 1}/${payload.masterEmails.length}] 📧 Email: ${item.email}`);
+            item.logs.forEach(msg => logOutput(`   -> ${msg}`));
             logOutput(`   -> ✅ Process completed!`);
             logOutput(`----------------------------------------`);
-        }
+        });
 
         logOutput(`\nBATCH JOB FINISHED`);
         renderSummaryTable(batchSummary);
@@ -216,7 +180,6 @@ async function handleTriggerClick(button, index) {
         button.disabled = false;
         executionStatus = "Failed";
 
-        // Trigger KV Store Save Event for Failed executions too
         try {
             const glia = await window.getGliaApi({ version: 'v1' });
             const headers = await glia.getRequestHeaders();
@@ -248,43 +211,23 @@ function renderSummaryTable(summary) {
     concatTexts("Summary table rendered internally.");
 }
 
-async function triggerUserUpdate(user, profile, issue, headers) {
-    const mgmtRes = await fetch(auth0UserMgmtUrl, { method: 'POST', headers, body: JSON.stringify({ action: "update", user, profile, issue }) });
-    await mgmtRes.json();
-    logOutput(`   -> Metadata merged: ${user.metadata.portal.cms.length} bot(s) total.`);
-}
-
-async function triggerUserCreation(user, issue, headers) {
-    const mgmtRes = await fetch(auth0UserMgmtUrl, { method: 'POST', headers, body: JSON.stringify({ action: "add", user, issue }) });
-    const mgmtData = await mgmtRes.json();
-    logOutput(`   -> Metadata applied: ${user.metadata.portal.cms.join(', ')}`);
-    logOutput(`   -> Syncing roles...`);
-    const roleRes = await fetch(auth0RoleSyncUrl, { method: 'POST', headers, body: JSON.stringify({ userId: mgmtData.auth0_user_id, roles: user.roles }) });
-    if (roleRes.ok) logOutput(`   -> Roles assigned successfully`);
-}
-
 async function saveExecutionLog(ticketKey, status, headers) {
-    let operatorName = "Client Engineer"; // Fallback name
+    let operatorName = "Client Engineer"; 
 
-    // 1. Get the current Glia Operator
     try {
         const gliaApi = await window.getGliaApi({ version: 'v1' });
         const operatorData = await gliaApi.getUser();
-
-        if (operatorData && operatorData.name) {
-            operatorName = operatorData.name;
-        }
+        if (operatorData && operatorData.name) operatorName = operatorData.name;
     } catch (error) {
         console.warn("Could not retrieve Glia Operator info. Defaulting to fallback.", error);
     }
 
-    // 2. Save to KV Store
     try {
         const payload = {
             action: "save_log",
             logData: {
                 ticket: ticketKey,
-                user: operatorName, // Dynamic user injected here
+                user: operatorName, 
                 status: status,
                 output: finalReport
             }
@@ -335,7 +278,6 @@ function renderRecentExecutionsTable(logs) {
         const formattedDate = dateObj.toLocaleString();
         const badgeClass = log.status.toLowerCase() === 'success' ? 'badge-success' : 'badge-error';
 
-        // Main Row
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td><strong>${log.ticket}</strong></td>
@@ -348,7 +290,6 @@ function renderRecentExecutionsTable(logs) {
         `;
         tbody.appendChild(tr);
 
-        // Collapsed Details Row
         const detailsTr = document.createElement('tr');
         detailsTr.className = 'ticket-details-row';
         detailsTr.style.display = 'none';

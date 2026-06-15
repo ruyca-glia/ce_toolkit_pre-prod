@@ -1,8 +1,9 @@
 {
   "scripts": {
-    "build": "./node_modules/esbuild/bin/esbuild  --bundle --format=esm --outfile=function-out.js --target=es2020 ce-tkt-jira-test.js"
+    "build": "./node_modules/esbuild/bin/esbuild  --bundle --format=esm --outfile=function-out.js --target=es2020 jira-ce-tkt-retrieval-auth0.js"
   },
   "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.1065.0",
     "slug": "^11.0.1"
   },
   "devDependencies": {
