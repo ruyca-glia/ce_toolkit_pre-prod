@@ -1,9 +1,6 @@
 // auth0_retrieveuser.js
 async function onInvoke(request, env) {
-  // 1. Credentials and Setup
-  //const email = "carlos.gomez@glia.com";
 
-  // 1a. Parse the outer Glia Envelope
   let envelope = {};
   try {
     envelope = await request.json();
@@ -11,13 +8,11 @@ async function onInvoke(request, env) {
     return Response.json({ error: "Failed to parse request body" }, { status: 400 });
   }
 
-  // 1b. Parse the inner Payload String
   let body = {};
   try {
     if (typeof envelope.payload === 'string') {
       body = JSON.parse(envelope.payload);
     } else {
-      // Fallback in case Glia sometimes passes it as an object
       body = envelope.payload || {};
     }
   } catch (e) {
@@ -25,7 +20,7 @@ async function onInvoke(request, env) {
   }
 
   const email = body.userEmail || "";
-  const apiToken = '..'
+  const apiToken = 'request.headers.get("X-Auth0-Token")';
   
   const baseUrl = 'https://finn-ai-customer-portal.auth0.com/api/v2/users';
 
@@ -35,7 +30,6 @@ async function onInvoke(request, env) {
   };
 
   try {
-    // 2. Búsqueda por email
     const query = encodeURIComponent(`email:"${email}"`);
     const searchUrl = `${baseUrl}?q=${query}`;
 
@@ -55,7 +49,6 @@ async function onInvoke(request, env) {
 
     const users = await searchResponse.json();
 
-    // Check if user exists
     if (!users || users.length === 0) {
       return Response.json({
         sucess: true,
@@ -64,7 +57,6 @@ async function onInvoke(request, env) {
       });
     }
 
-    // Extract the user_id from the first result
     const userId = users[0].user_id;
 
     // --- STEP 2: Get Full User Auth0 Profile ---
@@ -80,7 +72,6 @@ async function onInvoke(request, env) {
 
     const fullProfile = await profileResponse.json();
 
-    // 3. Respuesta Final usando Response.json()
     return Response.json({
       success: true,
       count: users.length,
@@ -89,7 +80,6 @@ async function onInvoke(request, env) {
     });
 
   } catch (error) {
-    // Manejo de errores de red o ejecución
     return Response.json({
       success: false,
       error: error.name,

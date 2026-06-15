@@ -22,8 +22,8 @@ async function onInvoke(request, env) {
   }
 
   const action = requestBody.action;
-  const user = requestBody.user; // Pre-calculated user object from automations.js
-  const apiToken = '';
+  const user = requestBody.user;
+  const apiToken = 'request.headers.get("X-Auth0-Token")';
   const baseUrl = 'https://finn-ai-customer-portal.auth0.com/api/v2/users';
 
   // Basic Validation
@@ -31,9 +31,6 @@ async function onInvoke(request, env) {
     return Response.json({ success: false, error: "Missing user data or email in request" }, { status: 400 });
   }
 
-  // ==========================================
-  // ACTION: ADD (User Creation)
-  // ==========================================
   if (action === "add") {
     try {
       const generatedPassword = generateSecurePassword();
@@ -82,9 +79,6 @@ async function onInvoke(request, env) {
     }
   }
 
-  // ==========================================
-  // ACTION: UPDATE (Metadata Update)
-  // ==========================================
   else if (action === "update") {
     try {
       const profile = requestBody.profile; // Current Auth0 profile for ID retrieval
@@ -95,8 +89,6 @@ async function onInvoke(request, env) {
 
       const userId = profile.user_id;
 
-      // Construction of the Payload for the PATCH
-      // We take the metadata pre-merged/calculated by automations.js
       const patchBody = {
         "user_metadata": user.metadata
       };
