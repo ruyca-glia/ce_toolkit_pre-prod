@@ -75,11 +75,7 @@ async function triggerUserUpdate(user, profile, issue, headers, token, logOutput
   // Añadimos auth0Token al payload para tu funcion downstream
   const mgmtRes = await fetch(auth0UserMgmtUrl, {
     method: 'POST',
-    headers = {
-      'Content-Type': 'application/json',
-      'Authorization': gliaBearer,
-      'X-Auth0-Token': token
-    },
+    headers,
     body: JSON.stringify({ action: "update", user, profile, issue })
   });
   await mgmtRes.json();
