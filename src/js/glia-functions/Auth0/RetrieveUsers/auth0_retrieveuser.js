@@ -20,7 +20,13 @@ async function onInvoke(request, env) {
   }
 
   const email = body.userEmail || "";
-  const apiToken = 'request.headers.get("X-Auth0-Token")';
+  
+  // 0 DRAMA: Sacamos el token directo de la "maleta" que nos mandó el Orquestador
+  const apiToken = body.auth0Token;
+
+  if (!apiToken) {
+    return Response.json({ success: false, error: "Missing Auth0 token in payload" }, { status: 401 });
+  }
   
   const baseUrl = 'https://finn-ai-customer-portal.auth0.com/api/v2/users';
 
@@ -51,7 +57,7 @@ async function onInvoke(request, env) {
 
     if (!users || users.length === 0) {
       return Response.json({
-        sucess: true,
+        success: true, // Corregido un pequeño typo que tenías aquí ("sucess")
         found: false,
         message: `No user found for email: ${email}`
       });

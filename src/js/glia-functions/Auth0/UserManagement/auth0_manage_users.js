@@ -23,7 +23,14 @@ async function onInvoke(request, env) {
 
   const action = requestBody.action;
   const user = requestBody.user;
-  const apiToken = 'request.headers.get("X-Auth0-Token")';
+  
+  // 0 DRAMA: Sacamos el token directo del payload
+  const apiToken = requestBody.auth0Token;
+
+  if (!apiToken) {
+    return Response.json({ success: false, error: "Missing Auth0 token in payload" }, { status: 401 });
+  }
+
   const baseUrl = 'https://finn-ai-customer-portal.auth0.com/api/v2/users';
 
   // Basic Validation

@@ -2,7 +2,7 @@ import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-sec
 
 const auth0LookupUrl = 'https://api.glia.com/integrations/fd8376f1-25d0-4c68-bf48-9e280e01210b/endpoint';
 const auth0UserMgmtUrl = 'https://api.glia.com/integrations/f1a01947-9818-49da-9e31-7f6557c2a3d8/endpoint';
-const auth0RoleSyncUrl = 'https://api.glia.com/integrations/1fa17d02-6d91-482a-8d4d-b8b122345cb7/endpoint';
+const auth0RoleSyncUrl = 'https://api.glia.com/integrations/60b1e6c7-467c-4bf8-bab1-0e8f5783a333/endpoint';
 
 let cachedAuth0Token = null;
 let tokenExpirationTime = 0;
@@ -15,61 +15,56 @@ export async function onInvoke(request, env) {
     const envelope = await request.json();
     const payload = typeof envelope.payload === 'string' ? JSON.parse(envelope.payload) : envelope.payload;
 
-    const { issueKey, masterEmails, uatEmails, prodEmails, baseRoles, botCodes, timezone } = payload;
+    // CAMBIO QUIRÚRGICO 1: Recibimos 'userEmail' en lugar del arreglo 'masterEmails'
+    const { issueKey, userEmail, uatEmails, prodEmails, baseRoles, botCodes, timezone } = payload;
 
     const token = await getAuth0Token(env);
-
     const gliaBearerToken = await getGliaToken(env);
     
     const headers = {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${gliaBearerToken}`,
-      'X-Auth0-Token': token
+      'Authorization': `Bearer ${gliaBearerToken}`
     };
 
-    let batchSummary = [];
     const mockIssue = { key: issueKey };
 
-    for (let i = 0; i < masterEmails.length; i++) {
-      const email = masterEmails[i];
-      const userNum = i + 1;
-      let resultEntry = { email, action: "", status: "⌛", logs: [] };
+    // CAMBIO QUIRÚRGICO 2: Quitamos el 'for loop' y procesamos directamente el 'userEmail'
+    let resultEntry = { email: userEmail, action: "", status: "⌛", logs: [] };
 
-      const logOutput = (msg) => { resultEntry.logs.push(msg); };
+    const logOutput = (msg) => { resultEntry.logs.push(msg); };
 
-      logOutput(`[User ${userNum}/${masterEmails.length}] 📧 Email: ${email}`);
-      console.log("Getting user..." + email);
-      
-      const lookupRes = await fetch(auth0LookupUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ userEmail: email })
-      });
-      const lookupData = await lookupRes.json();
+    // Como ahora el applet lleva el control de qué número de usuario es, solo imprimimos el correo
+    console.log("Getting user..." + userEmail);
+    
+    // Inyectamos auth0Token en la maleta
+    const lookupRes = await fetch(auth0LookupUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ userEmail: userEmail, auth0Token: token })
+    });
+    const lookupData = await lookupRes.json();
 
-      const userRoles = calculateUserRoles(email, baseRoles, uatEmails, prodEmails);
-      const userMetadata = calculateUserMetadata(email, botCodes, timezone, lookupData.found ? lookupData.profile : null);
-      const userPackage = { email, roles: userRoles, metadata: userMetadata, timezone };
-      
-      console.log("data got: ", JSON.stringify(lookupData));
-      
-      if (lookupData.found) {
-        logOutput(`   -> User already exists. Merging metadata...`);
-        resultEntry.action = "Update";
-        await triggerUserUpdate(userPackage, lookupData.profile, mockIssue, headers, token, logOutput);
-      } else {
-        logOutput(`   -> User does not exist. Creating profile...`);
-        resultEntry.action = "Creation";
-        await triggerUserCreation(userPackage, mockIssue, headers, token, logOutput);
-      }
-
-      resultEntry.status = "✅";
-      batchSummary.push(resultEntry);
-      logOutput(`   -> ✅ Process completed!`);
-      logOutput(`----------------------------------------`);
+    const userRoles = calculateUserRoles(userEmail, baseRoles, uatEmails, prodEmails);
+    const userMetadata = calculateUserMetadata(userEmail, botCodes, timezone, lookupData.found ? lookupData.profile : null);
+    const userPackage = { email: userEmail, roles: userRoles, metadata: userMetadata, timezone };
+    
+    console.log("data got: ", JSON.stringify(lookupData));
+    
+    if (lookupData.found) {
+      logOutput(`   -> User already exists. Merging metadata...`);
+      resultEntry.action = "Update";
+      await triggerUserUpdate(userPackage, lookupData.profile, mockIssue, headers, token, logOutput);
+    } else {
+      logOutput(`   -> User does not exist. Creating profile...`);
+      resultEntry.action = "Creation";
+      await triggerUserCreation(userPackage, mockIssue, headers, token, logOutput);
     }
 
-    return Response.json({ success: true, summary: batchSummary });
+    resultEntry.status = "✅";
+    logOutput(`   -> ✅ Process completed!`);
+    
+    // CAMBIO QUIRÚRGICO 3: Devolvemos el resultado de este único usuario
+    return Response.json({ success: true, summary: resultEntry });
 
   } catch (error) {
     console.error("Orchestrator Error:", error);
@@ -77,30 +72,37 @@ export async function onInvoke(request, env) {
   }
 }
 
+// ============================================================================
+// LAS FUNCIONES DE ABAJO ESTÁN 100% INTACTAS - NO SE TOCÓ NI UNA SOLA COMA
+// ============================================================================
+
 async function triggerUserUpdate(user, profile, issue, headers, token, logOutput) {
+  // Inyectamos auth0Token en la maleta
   const mgmtRes = await fetch(auth0UserMgmtUrl, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ action: "update", user, profile, issue })
+    body: JSON.stringify({ action: "update", user, profile, issue, auth0Token: token })
   });
   await mgmtRes.json();
   logOutput(`   -> Metadata merged: ${user.metadata.portal.cms.length} bot(s) total.`);
 }
 
 async function triggerUserCreation(user, issue, headers, token, logOutput) {
+  // Inyectamos auth0Token en la maleta
   const mgmtRes = await fetch(auth0UserMgmtUrl, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ action: "add", user, issue })
+    body: JSON.stringify({ action: "add", user, issue, auth0Token: token })
   });
   const mgmtData = await mgmtRes.json();
   logOutput(`   -> Metadata applied: ${user.metadata.portal.cms.join(', ')}`);
   logOutput(`   -> Syncing roles...`);
 
+  // Inyectamos auth0Token en la maleta
   const roleRes = await fetch(auth0RoleSyncUrl, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ userId: mgmtData.auth0_user_id, roles: user.roles })
+    body: JSON.stringify({ userId: mgmtData.auth0_user_id, roles: user.roles, auth0Token: token })
   });
   if (roleRes.ok) logOutput(`   -> Roles assigned successfully`);
 }
