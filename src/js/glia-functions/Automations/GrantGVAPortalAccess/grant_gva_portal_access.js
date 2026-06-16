@@ -1,7 +1,7 @@
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 
 const auth0LookupUrl = 'https://api.glia.com/integrations/fd8376f1-25d0-4c68-bf48-9e280e01210b/endpoint';
-const auth0UserMgmtUrl = 'https://api.glia.com/integrations/f1a01947-9818-49da-9e31-7f6557c2a3d8//endpoint';
+const auth0UserMgmtUrl = 'https://api.glia.com/integrations/f1a01947-9818-49da-9e31-7f6557c2a3d8/endpoint';
 const auth0RoleSyncUrl = 'https://api.glia.com/integrations/1fa17d02-6d91-482a-8d4d-b8b122345cb7/endpoint';
 
 // Caché en Memoria
@@ -17,10 +17,11 @@ export async function onInvoke(request, env) {
 
     const token = await getAuth0Token(env);
 
-    const gliaBearer = request.headers.get('Authorization');
+    const gliaAuth = btoa(`${env.GLIA_API_KEY_ID}:${env.GLIA_API_KEY_SECRET}`);
+    
     const headers = {
       'Content-Type': 'application/json',
-      'Authorization': gliaBearer,
+      'Authorization': `Basic ${gliaAuth}`, 
       'X-Auth0-Token': token
     };
 
@@ -35,18 +36,21 @@ export async function onInvoke(request, env) {
       const logOutput = (msg) => { resultEntry.logs.push(msg); };
 
       logOutput(`[User ${userNum}/${masterEmails.length}] 📧 Email: ${email}`);
-
+      console.log("Getting user..." + email);
+      
       const lookupRes = await fetch(auth0LookupUrl, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ userEmail: email, auth0Token: token })
+        body: JSON.stringify({ userEmail: email })
       });
       const lookupData = await lookupRes.json();
 
       const userRoles = calculateUserRoles(email, baseRoles, uatEmails, prodEmails);
       const userMetadata = calculateUserMetadata(email, botCodes, timezone, lookupData.found ? lookupData.profile : null);
       const userPackage = { email, roles: userRoles, metadata: userMetadata, timezone };
-
+      
+      console.log("data got: ", JSON.stringify(lookupData));
+      
       if (lookupData.found) {
         logOutput(`   -> User already exists. Merging metadata...`);
         resultEntry.action = "Update";
@@ -72,7 +76,6 @@ export async function onInvoke(request, env) {
 }
 
 async function triggerUserUpdate(user, profile, issue, headers, token, logOutput) {
-  // Añadimos auth0Token al payload para tu funcion downstream
   const mgmtRes = await fetch(auth0UserMgmtUrl, {
     method: 'POST',
     headers,
@@ -83,7 +86,6 @@ async function triggerUserUpdate(user, profile, issue, headers, token, logOutput
 }
 
 async function triggerUserCreation(user, issue, headers, token, logOutput) {
-  // Añadimos auth0Token al payload
   const mgmtRes = await fetch(auth0UserMgmtUrl, {
     method: 'POST',
     headers,
@@ -96,7 +98,7 @@ async function triggerUserCreation(user, issue, headers, token, logOutput) {
   const roleRes = await fetch(auth0RoleSyncUrl, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ userId: mgmtData.auth0_user_id, roles: user.roles, auth0Token: token })
+    body: JSON.stringify({ userId: mgmtData.auth0_user_id, roles: user.roles })
   });
   if (roleRes.ok) logOutput(`   -> Roles assigned successfully`);
 }
@@ -134,10 +136,6 @@ function calculateUserMetadata(email, botCodesRaw, timezone, existingProfile = n
   };
 }
 
-// ==========================================
-// OBTENCIÓN DEL TOKEN DESDE AWS (SIN TOCAR)
-// ==========================================
-
 async function getAuth0Token(env) {
   const now = Date.now();
   if (cachedAuth0Token && now < tokenExpirationTime) {
@@ -149,8 +147,8 @@ async function getAuth0Token(env) {
   const client = new SecretsManagerClient({
     region: "us-east-2",
     credentials: {
-      accessKeyId: env.AUTH0_ACCESS_KEY_ID,
-      secretAccessKey: env.AUTH0_SECRET_ACCESS_KEY
+      accessKeyId: env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: env.AWS_SECRET_ACCESS_KEY
     }
   });
 
@@ -165,8 +163,8 @@ async function getAuth0Token(env) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      client_id: secrets.client_id,
-      client_secret: secrets.client_secret,
+      client_id: secrets.AUTH0_ACCESS_KEY_ID, 
+      client_secret: secrets.AUTH0_SECRET_ACCESS_KEY,
       audience: "https://finn-ai-customer-portal.auth0.com/api/v2/",
       grant_type: "client_credentials"
     })

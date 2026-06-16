@@ -144,7 +144,6 @@ async function handleTriggerClick(button, index) {
         const glia = await window.getGliaApi({ version: 'v1' });
         const headers = await glia.getRequestHeaders();
         headers['Content-Type'] = 'application/json';
-        headers['X-Glia-Bearer'] = headers['Authorization'];
 
         // 1 sola llamada al Backend Orquestador
         const res = await fetch(auth0ProvisioningUrl, { 
