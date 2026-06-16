@@ -1,6 +1,7 @@
 const outputConsole = document.getElementById('output');
 let latestIssues = [];
 let finalReport = "";
+let userMail = "support@glia.com"; // Fallback email
 
 // Glia Function Invoke Endpoints
 const jiraIssuesUrl = 'https://api.glia.com/integrations/0f9dd445-cc46-4fd0-8aac-02bab77cd0e3/endpoint';
@@ -25,7 +26,6 @@ document.addEventListener('DOMContentLoaded', () => {
 async function getJiraTickets() {
     logOutput("Starting Glia API to fetch Jira tickets...", true);
     try {
-        let userMail = "support@glia.com"; // Fallback email
         const glia = await window.getGliaApi({ version: 'v1' });
         const headers = await glia.getRequestHeaders();
         headers['Content-Type'] = 'application/json';
@@ -187,7 +187,7 @@ async function handleTriggerClick(button, index) {
         renderSummaryTable(batchSummary);
 
         // Guardamos todo el reporte final en el KV Store
-        await saveExecutionLog(issue.key, executionStatus, headers);
+        await saveExecutionLog(issue.key, executionStatus, batchSummary, headers);
         button.innerHTML = 'Completed';
 
     } catch (error) {
