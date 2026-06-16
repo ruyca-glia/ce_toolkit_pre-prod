@@ -247,7 +247,7 @@ async function saveExecutionLog(ticketKey, status, executionSummaryReport, heade
             automation: "Auth0",
             status: status,
             ticket: ticketKey,
-            finalReport: summary.map(item => `Affected user: ${item.email} Action: ${item.action} With Results: ${item.status}`).join('\n')
+            finalReport: executionSummaryReport.map(item => `Affected user: ${item.email} Action: ${item.action} With Results: ${item.status}`).join('\n')
         };
 
         // const res = await fetch(kvStoreUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
