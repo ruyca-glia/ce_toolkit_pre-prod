@@ -4,9 +4,11 @@ const auth0LookupUrl = 'https://api.glia.com/integrations/fd8376f1-25d0-4c68-bf4
 const auth0UserMgmtUrl = 'https://api.glia.com/integrations/f1a01947-9818-49da-9e31-7f6557c2a3d8/endpoint';
 const auth0RoleSyncUrl = 'https://api.glia.com/integrations/1fa17d02-6d91-482a-8d4d-b8b122345cb7/endpoint';
 
-// Caché en Memoria
 let cachedAuth0Token = null;
 let tokenExpirationTime = 0;
+
+let cachedGliaToken = null;
+let gliaTokenExpirationTime = 0;
 
 export async function onInvoke(request, env) {
   try {
@@ -17,11 +19,11 @@ export async function onInvoke(request, env) {
 
     const token = await getAuth0Token(env);
 
-    const gliaAuth = btoa(`${env.GLIA_API_KEY_ID}:${env.GLIA_API_KEY_SECRET}`);
+    const gliaBearerToken = await getGliaToken(env);
     
     const headers = {
       'Content-Type': 'application/json',
-      'Authorization': `Basic ${gliaAuth}`, 
+      'Authorization': `Bearer ${gliaBearerToken}`,
       'X-Auth0-Token': token
     };
 
@@ -134,6 +136,36 @@ function calculateUserMetadata(email, botCodesRaw, timezone, existingProfile = n
     portal: { cms: mergedCmsIds },
     timezone: timezone
   };
+}
+
+async function getGliaToken(env) {
+  const now = Date.now();
+  if (cachedGliaToken && now < gliaTokenExpirationTime) {
+    console.log("Using cached Glia token.");
+    return cachedGliaToken;
+  }
+
+  console.log("Fetching new Glia Bearer token...");
+  const res = await fetch('https://api.glia.com/operator_authentication/tokens', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      api_key_id: env.GLIA_API_KEY_ID,
+      api_key_secret: env.GLIA_API_KEY_SECRET
+    })
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch Glia token: ${res.status} - ${res.statusText}`);
+  }
+
+  const data = await res.json();
+  cachedGliaToken = data.token; 
+  
+  // Aprox 55 minutes before refreshing token
+  gliaTokenExpirationTime = now + (3300 * 1000);
+  
+  return cachedGliaToken;
 }
 
 async function getAuth0Token(env) {

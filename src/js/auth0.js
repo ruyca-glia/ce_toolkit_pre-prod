@@ -7,7 +7,7 @@ const jiraIssuesUrl = 'https://api.glia.com/integrations/0f9dd445-cc46-4fd0-8aac
 const kvStoreUrl = 'https://api.glia.com/integrations/51a7d532-f34b-4f41-afea-9b966f64a9c6/endpoint';
 
 // NUEVO: Un solo endpoint maestro para Auth0
-const auth0ProvisioningUrl = 'https://api.glia.com/integrations/52ac5cc9-cfbc-4255-9142-41f280858384/endpoint'; 
+const grantGVAPortalAccessUrl = 'https://api.glia.com/integrations/52ac5cc9-cfbc-4255-9142-41f280858384/endpoint'; 
 
 function extractEmails(text) {
     if (!text) return [];
@@ -146,7 +146,7 @@ async function handleTriggerClick(button, index) {
         headers['Content-Type'] = 'application/json';
 
         // 1 sola llamada al Backend Orquestador
-        const res = await fetch(auth0ProvisioningUrl, { 
+        const res = await fetch(grantGVAPortalAccessUrl, { 
             method: 'POST', 
             headers, 
             body: JSON.stringify(payload) 
