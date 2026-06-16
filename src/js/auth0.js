@@ -117,25 +117,20 @@ async function handleTriggerClick(button, index) {
     const issue = latestIssues[index];
     const formData = issue.formData || {};
     
-    // Empaquetamos toda la data cruda para el backend
-    const payload = {
-        issueKey: issue.key,
-        masterEmails: extractEmails(formData["User’s Full Name + User Email"]),
-        uatEmails: extractEmails(formData["Users who should be able to export to UAT"]),
-        prodEmails: extractEmails(formData["Users who should be able to publish to prod"]),
-        baseRoles: formData["Roles needed to be added for Auth0"] || [],
-        botCodes: formData["Bot Code"] || "",
-        timezone: (Array.isArray(formData["Timezone"]) ? formData["Timezone"][0] : "UTC").split(" for ")[0]
-    };
+    const masterEmails = extractEmails(formData["User’s Full Name + User Email"]);
+    const uatEmails = extractEmails(formData["Users who should be able to export to UAT"]);
+    const prodEmails = extractEmails(formData["Users who should be able to publish to prod"]);
+    const baseRoles = formData["Roles needed to be added for Auth0"] || [];
+    const botCodes = formData["Bot Code"] || "";
+    const timezone = (Array.isArray(formData["Timezone"]) ? formData["Timezone"][0] : "UTC").split(" for ")[0];
 
     button.disabled = true;
     finalReport = ""; 
 
     logOutput(`========================================`, true);
-    logOutput(`🚀 STARTING BATCH PROCESS FOR ${payload.masterEmails.length} USERS`);
+    logOutput(`🚀 STARTING BATCH PROCESS FOR ${masterEmails.length} USERS`);
     logOutput(`Ticket: ${issue.key}`);
     logOutput(`========================================\n`);
-    button.innerHTML = `Processing with Auth0...`;
 
     let executionStatus = "Success";
     let batchSummary = [];
@@ -145,34 +140,54 @@ async function handleTriggerClick(button, index) {
         const headers = await glia.getRequestHeaders();
         headers['Content-Type'] = 'application/json';
 
-        // 1 sola llamada al Backend Orquestador
-        const res = await fetch(grantGVAPortalAccessUrl, { 
-            method: 'POST', 
-            headers, 
-            body: JSON.stringify(payload) 
-        });
-        
-        const result = await res.json();
-        
-        if (!result.success) {
-            throw new Error(result.error || "Unknown error from Provisioning function");
-        }
+        // RECUPERAMOS EL BUCLE: Procesamos 1 usuario por llamada al Orquestador
+        for (let i = 0; i < masterEmails.length; i++) {
+            const email = masterEmails[i];
+            const userNum = i + 1;
+            
+            button.innerHTML = `Processing ${userNum}/${masterEmails.length}...`;
+            logOutput(`[User ${userNum}/${masterEmails.length}] 📧 Email: ${email}`);
 
-        batchSummary = result.summary;
+            const singlePayload = {
+                issueKey: issue.key,
+                userEmail: email, // Enviamos un solo correo
+                uatEmails,
+                prodEmails,
+                baseRoles,
+                botCodes,
+                timezone
+            };
 
-        // Imprimimos los logs que el backend generó para conservar la UI en tiempo real
-        batchSummary.forEach((item, i) => {
-            logOutput(`[User ${i + 1}/${payload.masterEmails.length}] 📧 Email: ${item.email}`);
-            item.logs.forEach(msg => logOutput(`   -> ${msg}`));
-            logOutput(`   -> ✅ Process completed!`);
+            const res = await fetch(grantGVAPortalAccessUrl, { 
+                method: 'POST', 
+                headers, 
+                body: JSON.stringify(singlePayload) 
+            });
+            
+            const result = await res.json();
+            
+            if (!result.success) {
+                logOutput(`   -> ❌ FAILED: ${result.error}`);
+                batchSummary.push({ email, action: "Error", status: "❌" });
+                executionStatus = "Partial Failure"; // Si uno falla, seguimos con los demás
+                continue; 
+            }
+
+            const userResult = result.summary;
+            if (userResult && userResult.logs) {
+                userResult.logs.forEach(msg => logOutput(`   -> ${msg}`));
+            }
             logOutput(`----------------------------------------`);
-        });
+            
+            batchSummary.push(userResult);
+        }
 
         logOutput(`\nBATCH JOB FINISHED`);
         renderSummaryTable(batchSummary);
 
-        // Trigger KV Store Save Event
+        // Guardamos todo el reporte final en el KV Store
         await saveExecutionLog(issue.key, executionStatus, headers);
+        button.innerHTML = 'Completed';
 
     } catch (error) {
         logOutput(`\n❌ CRITICAL ERROR: ${error.message}`);
