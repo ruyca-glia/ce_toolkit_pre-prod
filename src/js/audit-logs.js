@@ -389,7 +389,7 @@
             method: "POST",
             headers: headers,
             body: JSON.stringify({
-                siteId: "42a8f124-f681-4673-be3d-9c3f1d349b1a", // CE Test Site, change later. 
+                siteId: "a5c110f6-a4a5-47d9-bbf1-d03d7a5e5089", // CE Test Site, change later. 
                 days: 30
             })
         });

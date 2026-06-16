@@ -15,3 +15,12 @@ src/js/glia-functions/Jira/package-lock.json
 
 # Vscode
 .vscode/
+
+
+# DS store
+*.DS_Store
+src/js/glia-functions/.DS_Store
+src/js/glia-functions/Auth0/.DS_Store
+src/js/glia-functions/Auth0/RolesManagement/.DS_Store
+src/js/glia-functions/Automations/.DS_Store
+src/js/glia-functions/Jira/.DS_Store
