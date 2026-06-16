@@ -5,9 +5,10 @@ let finalReport = "";
 // Glia Function Invoke Endpoints
 const jiraIssuesUrl = 'https://api.glia.com/integrations/0f9dd445-cc46-4fd0-8aac-02bab77cd0e3/endpoint';
 const kvStoreUrl = 'https://api.glia.com/integrations/51a7d532-f34b-4f41-afea-9b966f64a9c6/endpoint';
+const writeLogURL = 'https://api.glia.com/integrations/f026a5b6-ba81-4211-99e1-3667bbaf16e9/endpoint'
 
 // NUEVO: Un solo endpoint maestro para Auth0
-const grantGVAPortalAccessUrl = 'https://api.glia.com/integrations/52ac5cc9-cfbc-4255-9142-41f280858384/endpoint'; 
+const grantGVAPortalAccessUrl = 'https://api.glia.com/integrations/52ac5cc9-cfbc-4255-9142-41f280858384/endpoint';
 
 function extractEmails(text) {
     if (!text) return [];
@@ -116,7 +117,7 @@ function handleGoClick(index) {
 async function handleTriggerClick(button, index) {
     const issue = latestIssues[index];
     const formData = issue.formData || {};
-    
+
     const masterEmails = extractEmails(formData["User’s Full Name + User Email"]);
     const uatEmails = extractEmails(formData["Users who should be able to export to UAT"]);
     const prodEmails = extractEmails(formData["Users who should be able to publish to prod"]);
@@ -125,7 +126,7 @@ async function handleTriggerClick(button, index) {
     const timezone = (Array.isArray(formData["Timezone"]) ? formData["Timezone"][0] : "UTC").split(" for ")[0];
 
     button.disabled = true;
-    finalReport = ""; 
+    finalReport = "";
 
     logOutput(`========================================`, true);
     logOutput(`🚀 STARTING BATCH PROCESS FOR ${masterEmails.length} USERS`);
@@ -144,7 +145,7 @@ async function handleTriggerClick(button, index) {
         for (let i = 0; i < masterEmails.length; i++) {
             const email = masterEmails[i];
             const userNum = i + 1;
-            
+
             button.innerHTML = `Processing ${userNum}/${masterEmails.length}...`;
             logOutput(`[User ${userNum}/${masterEmails.length}] 📧 Email: ${email}`);
 
@@ -158,19 +159,19 @@ async function handleTriggerClick(button, index) {
                 timezone
             };
 
-            const res = await fetch(grantGVAPortalAccessUrl, { 
-                method: 'POST', 
-                headers, 
-                body: JSON.stringify(singlePayload) 
+            const res = await fetch(grantGVAPortalAccessUrl, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(singlePayload)
             });
-            
+
             const result = await res.json();
-            
+
             if (!result.success) {
                 logOutput(`   -> ❌ FAILED: ${result.error}`);
                 batchSummary.push({ email, action: "Error", status: "❌" });
                 executionStatus = "Partial Failure"; // Si uno falla, seguimos con los demás
-                continue; 
+                continue;
             }
 
             const userResult = result.summary;
@@ -178,7 +179,7 @@ async function handleTriggerClick(button, index) {
                 userResult.logs.forEach(msg => logOutput(`   -> ${msg}`));
             }
             logOutput(`----------------------------------------`);
-            
+
             batchSummary.push(userResult);
         }
 
@@ -199,7 +200,7 @@ async function handleTriggerClick(button, index) {
             const glia = await window.getGliaApi({ version: 'v1' });
             const headers = await glia.getRequestHeaders();
             headers['Content-Type'] = 'application/json';
-            await saveExecutionLog(issue.key, executionStatus, headers);
+            await saveExecutionLog(issue.key, executionStatus, batchSummary, headers);
         } catch (e) { console.error("Could not save failed log:", e); }
     }
 }
@@ -226,8 +227,8 @@ function renderSummaryTable(summary) {
     concatTexts("Summary table rendered internally.");
 }
 
-async function saveExecutionLog(ticketKey, status, headers) {
-    let operatorName = "Client Engineer"; 
+async function saveExecutionLog(ticketKey, status, executionSummaryReport, headers) {
+    let operatorName = "Client Engineer";
 
     try {
         const gliaApi = await window.getGliaApi({ version: 'v1' });
@@ -239,26 +240,37 @@ async function saveExecutionLog(ticketKey, status, headers) {
 
     try {
         const payload = {
-            action: "save_log",
-            logData: {
-                ticket: ticketKey,
-                user: operatorName, 
-                status: status,
-                output: finalReport
-            }
+            siteId: "a5c110f6-a4a5-47d9-bbf1-d03d7a5e5089",
+            userId: userMail,
+            action: "Grant GVA Portal Access",
+            url: "api.glia.com/integrations/52ac5cc9-cfbc-4255-9142-41f280858384/endpoint",
+            automation: "Auth0",
+            status: status,
+            ticket: ticketKey,
+            finalReport: summary.map(item => `Affected user: ${item.email} Action: ${item.action} With Results: ${item.status}`).join('\n')
         };
 
-        const res = await fetch(kvStoreUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
+        // const res = await fetch(kvStoreUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
+        // const result = await res.json();
+
+        // if (result.success) {
+        //     console.log("KV Store: Log saved successfully.", result.logId);
+        //     fetchRecentExecutions();
+        // } else {
+        //     console.error("KV Store Save Error:", result.error);
+        // }
+
+        const res = await fetch(writeLogURL, { method: 'POST', headers, body: JSON.stringify(payload) });
         const result = await res.json();
 
         if (result.success) {
-            console.log("KV Store: Log saved successfully.", result.logId);
+            console.log("Log for this execution was saved successfully.", result);
             fetchRecentExecutions();
         } else {
-            console.error("KV Store Save Error:", result.error);
+            console.error("ERROR saving logs:", result.error);
         }
     } catch (e) {
-        console.error("Failed to call KV Store save:", e);
+        console.error("Failed to call Log DB for WRITE action", e);
     }
 }
 
