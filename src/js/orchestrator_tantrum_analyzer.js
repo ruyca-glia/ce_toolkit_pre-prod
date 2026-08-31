@@ -1,4 +1,3 @@
-
 export async function onInvoke(request, env) {
    const tokenRes = await fetch('https://api.glia.com/operator_authentication/tokens', {
       method: 'POST',
