@@ -1,4 +1,5 @@
 var GATEWAY_URL = 'https://api.glia.com/integrations/1df8f530-35c4-4557-9c1b-a36be5d273a0/endpoint';
+const WRITE_LOG_URI = 'https://api.glia.com/integrations/f026a5b6-ba81-4211-99e1-3667bbaf16e9/endpoint';
 var sessionLog  = [];
 var gliaApi     = null;
 
@@ -84,6 +85,17 @@ function addLog(entry) {
     entry.time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     sessionLog.unshift(entry);
     renderLog();
+
+    writeAuditLog({
+        action: 'Tantrum Meter Analysis',
+        status: 'Completed',
+        finalReport: JSON.stringify({
+            message: entry.message,
+            alert: entry.alert,
+            level: entry.level,
+            tier: entry.tier
+        })
+    });
 }
 
 function renderLog() {
@@ -115,3 +127,33 @@ function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 document.getElementById('messageInput').addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); analyze(); }
 });
+
+async function writeAuditLog({ action, status, finalReport = '' }) {
+    try {
+        const glia = await window.getGliaApi({ version: 'v1' });
+        const headers = await glia.getRequestHeaders();
+        headers['Content-Type'] = 'application/json';
+
+        const user = await glia.getUser().catch(() => null);
+
+        const res = await fetch(WRITE_LOG_URI, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                siteId:     'a5c110f6-a4a5-47d9-bbf1-d03d7a5e5089',
+                userId:     user?.email ?? 'support@glia.com',
+                action,
+                automation: 'Tantrum Analyzer',
+                status,
+                url:        GATEWAY_URL, 
+                finalReport
+            })
+        });
+
+        const result = await res.json();
+        if (!result.success) console.error('Audit log failed:', result.error);
+
+    } catch (err) {
+        console.error('Could not reach the audit log function', err);
+    }
+}
