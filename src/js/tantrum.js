@@ -2,21 +2,6 @@ var GATEWAY_URL = 'https://api.glia.com/integrations/1df8f530-35c4-4557-9c1b-a36
 var sessionLog  = [];
 var gliaApi     = null;
 
-window.getGliaApi({ version: 'v1' }).then(function(glia) {
-    gliaApi = glia;
-
-    glia.addBufferedEventListener(glia.EVENTS.CHAT_MESSAGES, function(messages) {
-        var visitorMsgs = messages.filter(function(m) { return m.sender.type === 'visitor'; });
-        if (visitorMsgs.length > 0) {
-            document.getElementById('messageInput').value = visitorMsgs[visitorMsgs.length - 1].content;
-        }
-    });
-
-}).catch(function(err) {
-    document.getElementById('error').textContent   = 'Glia SDK unavailable. ' + err.message;
-    document.getElementById('error').style.display = 'block';
-});
-
 async function analyze() {
     var message = document.getElementById('messageInput').value.trim();
     var isVip   = document.getElementById('vipToggle').checked;
@@ -26,12 +11,6 @@ async function analyze() {
 
     errorEl.style.display = 'none';
     result.style.display  = 'none';
-
-    if (!gliaApi) {
-        errorEl.textContent   = 'Glia SDK not ready. Please wait a moment and try again.';
-        errorEl.style.display = 'block';
-        return;
-    }
 
     if (!message) {
         errorEl.textContent   = 'Please enter a visitor message.';
