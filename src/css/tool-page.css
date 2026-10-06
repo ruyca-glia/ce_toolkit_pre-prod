@@ -383,6 +383,103 @@
     background-color: var(--white);
 }
 
+/* Syntax-highlighted JSON editor. The textarea stays on top with transparent
+   text and the <pre> behind it carries the colours, because a textarea cannot
+   render styled content itself. The border and background move to the
+   container so both layers can be transparent. */
+.code-editor {
+    position: relative;
+    border: 1px solid var(--gray-300);
+    border-radius: 6px;
+    background-color: var(--gray-50);
+    overflow: hidden;
+}
+
+.code-editor:focus-within {
+    border-color: var(--primary);
+    background-color: var(--white);
+    box-shadow: 0 0 0 3px rgba(81, 15, 164, 0.1);
+}
+
+.code-editor.has-error,
+.code-editor.has-error:focus-within {
+    border-color: var(--status-error);
+    background-color: var(--white);
+}
+
+/* Both layers must keep identical metrics or the highlight drifts out of
+   alignment with the caret. Change these together, never one alone. */
+.code-editor-highlight,
+.code-editor .json-input {
+    margin: 0;
+    padding: 0.75rem;
+    border: 0;
+    font-family: "SF Mono", Monaco, "Courier New", monospace;
+    font-size: 0.75rem;
+    line-height: 1.45;
+    letter-spacing: normal;
+    tab-size: 2;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+.code-editor-highlight {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    color: var(--gray-900);
+}
+
+.code-editor .json-input,
+.code-editor .json-input:focus,
+.code-editor .json-input.has-error {
+    position: relative;
+    display: block;
+    width: 100%;
+    background-color: transparent;
+    color: transparent;
+    caret-color: var(--gray-900);
+    resize: vertical;
+    min-height: 6rem;
+    outline: none;
+    box-shadow: none;
+}
+
+/* The textarea paints its selection above the highlight layer, so a solid
+   selection colour would hide the coloured text underneath it. */
+.code-editor .json-input::selection {
+    background-color: rgba(81, 15, 164, 0.25);
+}
+
+/* JSON tokens. Braces, brackets and commas keep the default text colour. */
+.tok-key {
+    color: #0550ae;
+}
+
+.tok-string {
+    color: #0a7b55;
+}
+
+.tok-number {
+    color: #953800;
+}
+
+.tok-boolean {
+    color: #8250df;
+    font-weight: 600;
+}
+
+.tok-null {
+    color: #6e7781;
+    font-weight: 600;
+}
+
+.tok-punct {
+    color: #6e7781;
+}
+
 /* Badges */
 .badge {
     display: inline-block;

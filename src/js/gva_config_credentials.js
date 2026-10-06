@@ -134,13 +134,17 @@ function extractEmails(text) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('coreConfigInput').value = JSON.stringify(coreConfigDefault(), null, 2);
-    document.getElementById('credentialsInput').value = JSON.stringify(DEFAULT_CREDENTIALS, null, 2);
+    setCoreConfigText(JSON.stringify(coreConfigDefault(), null, 2));
+    setCredentialsText(JSON.stringify(DEFAULT_CREDENTIALS, null, 2));
 
-    document.getElementById('coreConfigInput').addEventListener('input', () => {
-        clearCoreConfigError();
-        syncFeatureControls();
+    bindJsonEditor(CORE_CONFIG_EDITOR, {
+        onInput: () => {
+            clearCoreConfigError();
+            syncFeatureControls();
+        },
+        onFormat: syncFeatureControls
     });
+    bindJsonEditor(CREDENTIALS_EDITOR);
     initFeatureControls();
     initThemeToggle();
     document.getElementById('coreConfigExpand').addEventListener('click', toggleCoreConfigExpanded);
@@ -302,14 +306,14 @@ function applyFormPayloadToEditors(formData) {
     if (coreRaw) {
         const parsed = tryParseJson(coreRaw);
         if (parsed) {
-            document.getElementById('coreConfigInput').value = JSON.stringify(parsed, null, 2);
+            setCoreConfigText(JSON.stringify(parsed, null, 2));
             loaded = true;
         }
     }
     if (credsRaw) {
         const parsed = tryParseJson(credsRaw);
         if (parsed) {
-            document.getElementById('credentialsInput').value = JSON.stringify(parsed, null, 2);
+            setCredentialsText(JSON.stringify(parsed, null, 2));
             loaded = true;
         }
     }
@@ -514,12 +518,12 @@ function validateCredentials(credentials) {
 
 function showCoreConfigError() {
     document.getElementById('coreConfigError').classList.remove('hidden');
-    document.getElementById('coreConfigInput').classList.add('has-error');
+    document.getElementById('coreConfigEditor').classList.add('has-error');
 }
 
 function clearCoreConfigError() {
     document.getElementById('coreConfigError').classList.add('hidden');
-    document.getElementById('coreConfigInput').classList.remove('has-error');
+    document.getElementById('coreConfigEditor').classList.remove('has-error');
 }
 
 // Grows the core configuration field to fit the whole JSON so a CE can read it
@@ -536,6 +540,7 @@ function toggleCoreConfigExpanded() {
     input.style.height = expanded ? '' : `${input.scrollHeight}px`;
     button.setAttribute('aria-expanded', String(!expanded));
     button.innerHTML = expanded ? 'Expand' : 'Collapse';
+    renderCoreConfigHighlight();
 }
 
 // The theme is already applied by the inline script in the page head. This only
@@ -560,6 +565,102 @@ function applyTheme(dark) {
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     button.setAttribute('aria-pressed', String(dark));
     button.innerHTML = dark ? '☀️ Light' : '🌙 Dark';
+}
+
+// Strings (optionally followed by a colon, which makes them keys), booleans,
+// null, numbers, and structural punctuation. Anything else is left in the
+// default text colour. This is a tokenizer, not a parser: it has to colour
+// text while a CE is still mid-edit, so it can never assume the input parses.
+const JSON_TOKEN_PATTERN = /("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false)\b|\b(null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|([{}\[\],])/g;
+
+function highlightJson(text) {
+    let html = '';
+    let lastIndex = 0;
+    let match;
+
+    JSON_TOKEN_PATTERN.lastIndex = 0;
+    while ((match = JSON_TOKEN_PATTERN.exec(text)) !== null) {
+        const [raw, str, colon, bool, nul, num, punct] = match;
+        html += escapeHtml(text.slice(lastIndex, match.index));
+
+        if (str !== undefined) {
+            html += `<span class="${colon ? 'tok-key' : 'tok-string'}">${escapeHtml(str)}</span>`;
+            if (colon) html += `<span class="tok-punct">${escapeHtml(colon)}</span>`;
+        } else if (bool !== undefined) {
+            html += `<span class="tok-boolean">${escapeHtml(bool)}</span>`;
+        } else if (nul !== undefined) {
+            html += `<span class="tok-null">${escapeHtml(nul)}</span>`;
+        } else if (num !== undefined) {
+            html += `<span class="tok-number">${escapeHtml(num)}</span>`;
+        } else {
+            html += `<span class="tok-punct">${escapeHtml(punct)}</span>`;
+        }
+
+        lastIndex = match.index + raw.length;
+    }
+
+    return html + escapeHtml(text.slice(lastIndex));
+}
+
+const CORE_CONFIG_EDITOR = { inputId: 'coreConfigInput', highlightId: 'coreConfigHighlight' };
+const CREDENTIALS_EDITOR = { inputId: 'credentialsInput', highlightId: 'credentialsHighlight' };
+
+function bindJsonEditor(editor, { onInput, onFormat } = {}) {
+    const input = document.getElementById(editor.inputId);
+    input.addEventListener('input', () => {
+        if (onInput) onInput();
+        renderJsonHighlight(editor);
+    });
+    input.addEventListener('scroll', () => {
+        const highlight = document.getElementById(editor.highlightId);
+        highlight.scrollTop = input.scrollTop;
+        highlight.scrollLeft = input.scrollLeft;
+    });
+    input.addEventListener('blur', () => formatJsonEditorIfValid(editor, onFormat));
+}
+
+function renderJsonHighlight(editor) {
+    const input = document.getElementById(editor.inputId);
+    const highlight = document.getElementById(editor.highlightId);
+    // The trailing newline keeps a line box for a text that ends in Enter,
+    // which <pre> would otherwise collapse.
+    highlight.innerHTML = `${highlightJson(input.value)}\n`;
+    highlight.scrollTop = input.scrollTop;
+    highlight.scrollLeft = input.scrollLeft;
+}
+
+function setJsonEditorText(editor, text) {
+    document.getElementById(editor.inputId).value = text;
+    renderJsonHighlight(editor);
+}
+
+// Prettier's JSON default is 2-space indent with no trailing commas. We get
+// that from JSON.stringify rather than shipping the Prettier bundle into the
+// applet. Invalid JSON is left alone so a mid-edit blur does not wipe the field.
+function formatJsonEditorIfValid(editor, afterFormat) {
+    const input = document.getElementById(editor.inputId);
+    let parsed;
+    try {
+        parsed = JSON.parse(input.value);
+    } catch (error) {
+        return;
+    }
+    const pretty = JSON.stringify(parsed, null, 2);
+    if (pretty === input.value) return;
+    setJsonEditorText(editor, pretty);
+    if (afterFormat) afterFormat();
+}
+
+function renderCoreConfigHighlight() {
+    renderJsonHighlight(CORE_CONFIG_EDITOR);
+}
+
+function setCoreConfigText(text) {
+    setJsonEditorText(CORE_CONFIG_EDITOR, text);
+}
+
+function setCredentialsText(text) {
+    setJsonEditorText(CREDENTIALS_EDITOR, text);
 }
 
 function initFeatureControls() {
@@ -596,7 +697,7 @@ function writeControlToConfig(control) {
         return;
     }
 
-    document.getElementById('coreConfigInput').value = JSON.stringify(config, null, 2);
+    setCoreConfigText(JSON.stringify(config, null, 2));
     clearCoreConfigError();
     refreshCoreConfigHeight();
     syncIdTypeOptions();
