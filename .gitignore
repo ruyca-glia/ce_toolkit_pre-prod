@@ -13,6 +13,9 @@ src/js/glia-functions/Jira/info/
 src/js/glia-functions/Jira/package-lock.json
 
 
+# Dependencies
+node_modules/
+
 # Vscode
 .vscode/
 

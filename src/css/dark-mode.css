@@ -1,0 +1,160 @@
+/* ===========================================
+   Dark mode, scoped to the GVA Config and Credentials page
+   Loaded only by gva_config_credentials.html. Every override is gated behind
+   [data-theme="dark"] on <html>, so nothing here changes the light theme.
+   =========================================== */
+
+/* Theme switch in the page header, present in both themes. */
+.theme-toggle {
+    font: inherit;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--white);
+    background-color: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    padding: 0.25rem 0.75rem;
+    margin-right: 0.75rem;
+    cursor: pointer;
+}
+
+.theme-toggle:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+}
+
+.theme-toggle:focus-visible {
+    outline: 2px solid var(--white);
+    outline-offset: 2px;
+}
+
+/* ---- Palette ----------------------------------------------------------
+   The page draws almost all of its colour from these variables, so the dark
+   theme mostly inverts the gray ramp: --white becomes the panel surface and
+   --gray-900 becomes the primary text colour. Rules that use those two names
+   literally are corrected further down. */
+[data-theme="dark"] {
+    color-scheme: dark;
+
+    --primary: #a78bfa;
+    --primary-dark: #8b5cf6;
+    --primary-light: #c4b5fd;
+
+    --white: #171d2b;
+    --gray-50: #0f1420;
+    --gray-100: #1f2637;
+    --gray-200: #2b3345;
+    --gray-300: #3a4458;
+    --gray-500: #9aa5b8;
+    --gray-700: #c9d2e0;
+    --gray-900: #e8ecf4;
+
+    --status-ok: #34d399;
+    --status-warning: #fbbf24;
+    --status-error: #f87171;
+}
+
+/* The toggle itself keeps a real white, since it sits on the purple header. */
+[data-theme="dark"] .theme-toggle {
+    color: #ffffff;
+}
+
+[data-theme="dark"] .theme-toggle:focus-visible {
+    outline-color: #ffffff;
+}
+
+/* ---- Header -----------------------------------------------------------
+   The header keeps a deep brand purple rather than the lightened --primary,
+   so its white text stays high contrast. */
+[data-theme="dark"] .header {
+    background-color: #2d085c;
+    color: #ffffff;
+}
+
+[data-theme="dark"] .back-link {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+[data-theme="dark"] .back-link:hover {
+    color: #ffffff;
+}
+
+/* ---- Output console ---------------------------------------------------
+   The console is deliberately dark in both themes, so it cannot inherit the
+   inverted --gray-900 and --gray-700 surfaces. */
+[data-theme="dark"] .output-container {
+    background-color: #0a0e17;
+}
+
+[data-theme="dark"] .output-header {
+    background-color: #1b2130;
+}
+
+[data-theme="dark"] .output-status {
+    color: #cbd5e1;
+}
+
+[data-theme="dark"] .output-header .btn {
+    color: #cbd5e1;
+    border-color: #475569;
+}
+
+[data-theme="dark"] .output-header .btn:hover {
+    background-color: #334155;
+}
+
+/* ---- Controls ---------------------------------------------------------- */
+[data-theme="dark"] .approval-container {
+    background-color: #1b2130;
+    border-color: #2b3345;
+}
+
+[data-theme="dark"] .purple-button:disabled {
+    background-color: #2b3345;
+    color: var(--gray-500);
+}
+
+[data-theme="dark"] .feature-row input[type="checkbox"],
+[data-theme="dark"] .approval-checkbox {
+    accent-color: var(--primary);
+}
+
+/* The light focus ring is almost invisible against a dark surface. */
+[data-theme="dark"] .json-input:focus,
+[data-theme="dark"] .form-group textarea:focus,
+[data-theme="dark"] .form-group input:focus,
+[data-theme="dark"] .form-group select:focus {
+    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.25);
+}
+
+/* ---- Badges -----------------------------------------------------------
+   The light theme pairs a 10% tint with dark text, which inverts badly. */
+[data-theme="dark"] .badge-success {
+    background-color: rgba(52, 211, 153, 0.15);
+    color: #6ee7b7;
+}
+
+[data-theme="dark"] .badge-error {
+    background-color: rgba(248, 113, 113, 0.15);
+    color: #fca5a5;
+}
+
+[data-theme="dark"] .badge-warning {
+    background-color: rgba(251, 191, 36, 0.15);
+    color: #fcd34d;
+}
+
+[data-theme="dark"] .badge-info {
+    background-color: rgba(167, 139, 250, 0.15);
+    color: var(--primary-light);
+}
+
+/* ---- Remaining hard-coded light colours ------------------------------- */
+[data-theme="dark"] .details-container {
+    background-color: #1b2130;
+    border-color: #2b3345;
+}
+
+[data-theme="dark"] .loader {
+    border-color: #2b3345;
+    border-top-color: var(--primary);
+}

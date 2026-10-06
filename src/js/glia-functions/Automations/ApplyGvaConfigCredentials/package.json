@@ -1,0 +1,12 @@
+{
+  "name": "apply-gva-config-credentials",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "./node_modules/esbuild/bin/esbuild --bundle --format=esm --outfile=function-out.js --target=es2020 apply_gva_config_credentials.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.2"
+  }
+}
