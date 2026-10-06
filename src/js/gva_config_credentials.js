@@ -157,6 +157,8 @@ document.addEventListener('DOMContentLoaded', () => {
         logOutput('Waiting for script execution. Confirm a payload and click its Send button to begin.', true);
         setStatus('Ready');
     });
+
+    getJiraTickets();
 });
 
 async function getGliaHeaders() {
@@ -174,6 +176,7 @@ async function getGliaHeaders() {
 
 async function getJiraTickets() {
     if (!jiraIssuesUrl) {
+        showTicketTableMessage('Jira fetcher is not deployed yet. Use the ad-hoc payload panels below.');
         logOutput('Jira fetcher URL is not set yet. Ticket table stays empty until that Glia Function is deployed. You can still send an ad-hoc payload to a Word document.', true);
         return;
     }
@@ -192,12 +195,20 @@ async function getJiraTickets() {
             populateTicketTable(latestIssues);
             logOutput(`Table updated with ${latestIssues.length} Jira ticket(s).`);
         } else {
+            showTicketTableMessage('Could not load your Jira tickets.');
             logOutput(`Jira fetch failed: ${result.error || 'unknown error'}`);
         }
     } catch (error) {
         console.error('Critical error communicating with Jira API:', error);
+        showTicketTableMessage('Could not load your Jira tickets.');
         logOutput(`Could not load Jira tickets: ${error.message}`);
     }
+}
+
+function showTicketTableMessage(message) {
+    const tableBody = document.getElementById('ticketTableBody');
+    if (!tableBody) return;
+    tableBody.innerHTML = `<tr><td colspan="5">${escapeHtml(message)}</td></tr>`;
 }
 
 function populateTicketTable(issues) {
@@ -205,7 +216,7 @@ function populateTicketTable(issues) {
     if (!tableBody) return;
     tableBody.innerHTML = '';
     if (!issues.length) {
-        tableBody.innerHTML = '<tr><td colspan="5">No open GVA config tickets assigned to you.</td></tr>';
+        showTicketTableMessage('No open GVA config tickets assigned to you.');
         return;
     }
     issues.forEach((issue, index) => {
@@ -217,7 +228,7 @@ function populateTicketTable(issues) {
         row.innerHTML = `
             <td><a href="${jiraLink}" target="_blank" style="font-weight:bold; color:var(--primary);">${issue.key}</a></td>
             <td>${priority}</td>
-            <td>GB Config change</td>
+            <td>GVA config change</td>
             <td><span class="badge badge-info">Open</span></td>
             <td><button class="btn btn-primary go-button" type="button">View More</button></td>
         `;
