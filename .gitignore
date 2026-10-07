@@ -24,3 +24,7 @@ src/js/glia-functions/Auth0/.DS_Store
 src/js/glia-functions/Auth0/RolesManagement/.DS_Store
 src/js/glia-functions/Automations/.DS_Store
 src/js/glia-functions/Jira/.DS_Store
+
+
+# Dependencies (install with npm ci from package-lock.json)
+node_modules/
