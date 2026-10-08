@@ -1,4 +1,4 @@
-const INVOCATION_URI = 'https://api.glia.com/integrations/d64fa03f-e3d1-4b83-9740-da3b2f07a005/endpoint';
+const INVOCATION_URI = 'https://api.glia.com/integrations/58903b6c-b724-4f14-b75e-e4d924b3db65/endpoint';
 const WRITE_LOG_URI = 'https://api.glia.com/integrations/f026a5b6-ba81-4211-99e1-3667bbaf16e9/endpoint';
 
 window.getGliaApi({ version: 'v1' }).then(function (glia) {
