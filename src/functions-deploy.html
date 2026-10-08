@@ -11,6 +11,21 @@
     <script async src="https://api.glia.com/salemove_integration.js"></script>
     <script type="text/javascript" src="//libs.glia.com/axon.js"></script>
     <script src="./js/functions-deploy.js?v=audit-log" defer></script>
+    <style>
+        .panel .bearer-skip-note {
+            margin: 0 0 1rem;
+            color: #1d4ed8;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 6px;
+            padding: 0.45rem 0.7rem;
+            font-size: 0.875rem;
+        }
+
+        .panel .bearer-skip-note strong {
+            color: inherit;
+        }
+    </style>
 </head>
 
 <body>
@@ -73,6 +88,7 @@
                     <input id="api-key-secret" type="password" placeholder="Site API key secret" autocomplete="off">
                     <span class="form-hint">Sent only to POST /sites/tokens. It is not saved in this page.</span>
                 </div>
+                <p class="bearer-skip-note"><strong>NOTE:</strong> Most CEs can obtain a bearer by signing in to the site and copying the token from that session. If you already have one, skip the API key and secret and paste the bearer below.</p>
                 <button class="btn btn-secondary" id="generate-token" type="button">Generate Token</button>
                 <div class="form-group" style="margin-top: 1.25rem;">
                     <label for="access-token">Access token</label>
