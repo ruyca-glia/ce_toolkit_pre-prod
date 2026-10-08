@@ -2,7 +2,7 @@
 
 export async function onInvoke(request, env) {
     try {
-        const baseBearer = request.headers.get('authorization') || request.headers.get('Authorization');
+        const baseBearer = request.headers.get('Authorization2');
 
         const envelope = await request.json();
         const payload = typeof envelope.payload === 'string' ? JSON.parse(envelope.payload) : envelope.payload;
