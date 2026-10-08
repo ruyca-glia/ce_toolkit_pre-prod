@@ -25,7 +25,7 @@ async function clone() {
         const glia = await window.getGliaApi({ version: 'v1' });
         var headers = await glia.getRequestHeaders();
         headers['Content-Type'] = 'application/json';
-        headers['Authorization2'] = bearerToken;
+        headers['Authorization'] = bearerToken;
 
         var res = await fetch(INVOCATION_URI, {
             method: 'POST',
