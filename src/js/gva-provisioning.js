@@ -29,21 +29,21 @@ const LABELS = {
     gvaGeneration: "gva_generation"
 };
 
-// GVA Type form option (matched by its first word) -> Lambda gva_type + default clone base per language.
+// GVA Type form option (matched by its first word) -> Lambda gva_type + default clone base per language,
+// as listed in the GVA Provisioning Guide. EA, SMS and Jumpstart have a single base for every language.
 // isChat drives big_enabled. SMS and Jumpstart count as "all other types" (big_enabled = false).
-// unconfirmedBase: base names that follow the naming pattern but are not confirmed to exist. They are sent
-// as-is (no fallback to English) with a warning; if the base doesn't exist, the Lambda fails.
 const GVA_TYPES = {
     CHAT: { lambdaType: "CHAT", isChat: true, defaultBase: { "en-US": "banking-digital-en", "es-US": "banking-digital-es" } },
-    SMS: { lambdaType: "CHAT", isChat: false, defaultBase: { "en-US": "banking-sms-en" }, unconfirmedBase: { "es-US": "banking-sms-es" } },
-    JUMPSTART: { lambdaType: "CHAT", isChat: false, defaultBase: { "en-US": "banking-jumpstart-en" }, unconfirmedBase: { "es-US": "banking-jumpstart-es" } },
+    SMS: { lambdaType: "CHAT", isChat: false, defaultBase: { "en-US": "banking-sms-en", "es-US": "banking-sms-en" } },
+    JUMPSTART: { lambdaType: "CHAT", isChat: false, defaultBase: { "en-US": "banking-jumpstart-en", "es-US": "banking-jumpstart-en" } },
     PHONE: { lambdaType: "PHONE", isChat: false, defaultBase: { "en-US": "banking-voice-en", "es-US": "banking-voice-es" } },
     OA: { lambdaType: "OA", isChat: false, defaultBase: { "en-US": "banking-aa-en", "es-US": "banking-aa-es" } },
-    EA: { lambdaType: "EA", isChat: false, defaultBase: { "en-US": "banking-digital-en" }, unconfirmedBase: { "es-US": "banking-digital-es" } }
+    EA: { lambdaType: "EA", isChat: false, defaultBase: { "en-US": "banking-digital-en", "es-US": "banking-digital-en" } }
 };
 
-// Environment form option -> provision_bot.sh env -> target Lambda
-const ENVIRONMENTS = { "prod & uat": "prod" };
+// Environment form option -> provision_bot.sh env -> target Lambda.
+// Temporary: our AWS credentials only reach the dev space, so "prod & uat" tickets are sent to dev for now.
+const ENVIRONMENTS = { "prod & uat": "dev" };
 const LAMBDA_CLUSTERS = { dev: "k8s-dev", staging: "k8s-staging", prod: "k8s-prod-na" };
 
 const LANGUAGES = ["en-US", "es-US"];
@@ -125,12 +125,15 @@ function populateTicketTable(issues) {
 
 /**
  * Turns the raw Jira form answers into the provision_bot.sh / Lambda parameters,
- * following GVA_Provisioning_Guide.md and the "Using Default Base" / "Using Client Base" tables.
- * Returns { params, lambdaName, errors, notes }. Any error blocks the trigger.
+ * following GVA_Provisioning_Guide.md:
+ *   Default base: clone base from GVA_TYPES; CHAT -> big_enabled true, every other type false;
+ *                 use_template_content true; copy_instance_usergoals true.
+ *   Client base:  clone base from the "Specific ..." fields; CHAT -> big_enabled true, every other type false;
+ *                 use_template_content false; copy_instance_usergoals true.
+ * Returns { params, lambdaName, errors }. Any error blocks the trigger.
  */
 function buildProvisioningParams(formData) {
     const errors = [];
-    const notes = [];
 
     const text = (label) => {
         const value = formData[label];
@@ -188,17 +191,10 @@ function buildProvisioningParams(formData) {
     const resolveBase = (mode, specificLabel) => {
         if (mode === "other") return required(specificLabel, text(specificLabel));
         if (mode !== "default" || !gvaType || !language) return "";
-        if (gvaType.defaultBase[language]) return gvaType.defaultBase[language];
-        const base = (gvaType.unconfirmedBase || {})[language] || "";
-        if (base) {
-            notes.push(`"${gvaTypeLabel}" has no confirmed ${language} default base. ${base} will be used, but it may not exist. Please verify it on your end before triggering: if you proceed, you are responsible for the result of this provisioning.`);
-        }
-        return base;
+        return gvaType.defaultBase[language] || "";
     };
     const cmsBaseCustomerName = resolveBase(cmsMode, LABELS.cmsBaseSpecific);
     const atlasExistingCustomer = resolveBase(atlasMode, LABELS.atlasBaseSpecific);
-    // Both bases get the same note; show it once.
-    const uniqueNotes = [...new Set(notes)];
 
     const useDefaultBase = cmsMode === "default" && atlasMode === "default";
     const isChat = gvaType ? gvaType.isChat : false;
@@ -221,13 +217,13 @@ function buildProvisioningParams(formData) {
     };
 
     const lambdaName = env ? `${LAMBDA_CLUSTERS[env]}-gva-provisioning-service` : "";
-    return { params, lambdaName, errors, notes: uniqueNotes };
+    return { params, lambdaName, errors };
 }
 
 function handleGoClick(index) {
     const issue = latestIssues[index];
     const formData = issue.formData || {};
-    const { params, lambdaName, errors, notes } = buildProvisioningParams(formData);
+    const { params, lambdaName, errors } = buildProvisioningParams(formData);
     clearActivePanels();
 
     const allButtons = document.querySelectorAll('.go-button');
@@ -247,10 +243,6 @@ function handleGoClick(index) {
         ? `<div class="gva-alert gva-alert-error">
                <strong>This ticket can't be provisioned until these are fixed:</strong>
                <ul>${errors.map(e => `<li>${escapeHtml(e)}</li>`).join('')}</ul>
-           </div>` : "";
-    const notesHtml = notes.length > 0
-        ? `<div class="gva-alert gva-alert-warning">
-               <ul>${notes.map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul>
            </div>` : "";
     const blocked = errors.length > 0 ? "disabled" : "";
 
@@ -275,11 +267,11 @@ function handleGoClick(index) {
                 <h4>Parameters to send</h4>
                 <dl class="gva-kv">
                     <dt>Target Lambda</dt><dd><code>${escapeHtml(lambdaName || "—")}</code></dd>
+                    ${params.env === "dev" ? `<dt></dt><dd>Ticket says ${show(LABELS.environment)}; sending dev until prod credentials are available.</dd>` : ""}
                     ${paramsHtml}
                 </dl>
                 </section>
                 ${errorsHtml}
-                ${notesHtml}
                 <div class="approval-container">
                     <label><input type="checkbox" class="approval-checkbox" ${blocked} onclick="handleApprovalCheck(this)"> Everything looks correct. Proceed.</label>
                 </div>
@@ -441,7 +433,7 @@ const MOCK_ISSUES = [
       formData: mockForm({ "Language": ["es-US"] }) },
     { id: "3", key: "CE-1003", summary: "PHONE English, default base", customField: "N/A",
       formData: mockForm({ "GVA Type": ["PHONE"] }) },
-    { id: "4", key: "CE-1004", summary: "SMS Spanish, default base (English-only base)", customField: "N/A",
+    { id: "4", key: "CE-1004", summary: "SMS Spanish, default base -> banking-sms-en", customField: "N/A",
       formData: mockForm({ "GVA Type": ["SMS (CHAT)"], "Language": ["es-US"] }) },
     { id: "5", key: "CE-1005", summary: "OA, client base", customField: "N/A",
       formData: mockForm({ "GVA Type": ["OA (stands for Operator Assist/Agent Assist)"], "cms_base_customer_name": [OTHER_LABEL], "Specific cms_base_customer_name": "acme-oa",
