@@ -1,8 +1,8 @@
 // Functions Deploy page.
 // The operator picks "make a new one" or "update an existing one".
-// Both paths use the site bearer token from POST /sites/tokens.
-// A version upload only starts a job. This page polls that job, then sets
-// the finished version as the function's current version.
+// This page sends the form, including the typed API key or bearer, to the
+// Functions Deploy Glia Function. That function exchanges the key, creates
+// the version, polls the job, and sets the finished version as current.
 
 const outputConsole = document.getElementById("output");
 const outputStatus = document.getElementById("output-status");
@@ -37,14 +37,10 @@ const AUDIT_SITE_ID = "a5c110f6-a4a5-47d9-bbf1-d03d7a5e5089";
 // Must match the Functions Deploy option in src/audit-logs.html.
 const AUTOMATION_NAME = "Functions Deploy";
 
-// Check 9 used to be the one that finished, at 2 seconds apart: about 18 seconds.
-// Wait that long once, then check every second instead of polling from the start.
-const FIRST_POLL_MS = 18000;
-const LATER_POLL_MS = 1000;
-const LATER_POLL_LIMIT = 20;
+// Invocation URI for the deployed Functions Deploy function.
+const FUNCTIONS_DEPLOY_URI = "https://api.glia.com/integrations/456c63b0-61b9-4171-8f7c-73b24a7dd4fa/endpoint";
+
 const MAX_CODE_BYTES = 512000;
-const MAX_ENV_BYTES = 4000;
-const MAX_HEADERS = 30;
 
 document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("choose-create").addEventListener("click", () => chooseMode("create"));
@@ -63,9 +59,9 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("generate-token").addEventListener("click", async () => {
         try {
             setStatus("Requesting token");
-            const token = await fetchSiteToken();
-            tokenField.value = token;
-            logOutput("Site token loaded: " + token.substring(0, 5) + "...", true);
+            const result = await callFunction("token", collectAuth());
+            tokenField.value = result.accessToken || "";
+            logOutput("Site token loaded: " + String(result.accessToken || "").substring(0, 5) + "...", true);
             setStatus("Token ready");
         } catch (error) {
             logOutput("Token request failed: " + error.message, true);
@@ -148,58 +144,67 @@ function resetSession() {
     closeReset();
 }
 
-// POST /sites/tokens. The typed secret never goes into the console.
-async function fetchSiteToken() {
-    const baseUrl = baseUrlValue();
-    const apiKeyId = document.getElementById("api-key-id").value.trim();
-    const apiKeySecret = document.getElementById("api-key-secret").value;
-    if (!baseUrl || !apiKeyId || !apiKeySecret) {
-        throw new Error("Base URL, API Key ID, and API Key Secret are required.");
+// One call to the deployed Glia Function. The page does not call api.glia.com for this tool.
+async function callFunction(action, payload) {
+    if (!FUNCTIONS_DEPLOY_URI) {
+        throw new Error("The Functions Deploy invocation URI is not set yet.");
     }
-
-    const result = await gliaFetch(baseUrl + "/sites/tokens", {
+    const glia = await window.getGliaApi({ version: "v1" });
+    const headers = await glia.getRequestHeaders();
+    headers["Content-Type"] = "application/json";
+    const response = await fetch(FUNCTIONS_DEPLOY_URI, {
         method: "POST",
-        headers: {
-            "Accept": "application/vnd.salemove.v1+json",
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            api_key_id: apiKeyId,
-            api_key_secret: apiKeySecret
-        })
+        headers: headers,
+        body: JSON.stringify(Object.assign({ action: action }, payload || {}))
     });
-    if (!result.response.ok || !result.data.access_token) {
-        throw new Error(apiError(result.response, result.data, "No access_token in the response."));
+    const data = await readJson(response);
+    const body = data && data.payload && typeof data.payload === "object" ? data.payload : data;
+    if (!response.ok || body.success === false) {
+        const error = new Error(body.error || "The Functions Deploy function failed.");
+        error.logs = body.logs || [];
+        error.summary = body.summary || [];
+        throw error;
     }
-    return result.data.access_token;
+    return body;
 }
 
-// Reuse a token already on screen, or request one.
-async function ensureToken() {
-    const existing = tokenField.value.trim();
-    if (existing) {
-        return existing;
-    }
-    logOutput("Requesting site access token");
-    const token = await fetchSiteToken();
-    tokenField.value = token;
-    logOutput("   -> Token loaded: " + token.substring(0, 5) + "...");
-    return token;
-}
-
-function baseUrlValue() {
-    return document.getElementById("base-url").value.replace(/\/$/, "");
-}
-
-function authHeaders(token) {
+// Base URL and the key or bearer the operator typed. The function uses these.
+function collectAuth() {
     return {
-        "Accept": "application/vnd.salemove.v1+json",
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + token
+        baseUrl: document.getElementById("base-url").value.replace(/\/$/, ""),
+        apiKeyId: document.getElementById("api-key-id").value.trim(),
+        apiKeySecret: document.getElementById("api-key-secret").value,
+        accessToken: tokenField.value.trim()
     };
 }
 
-// GET /functions?site_ids[]= so the operator can pick one.
+// Form fields for the function, including the typed credentials.
+function collectPayload() {
+    const auth = collectAuth();
+    if (mode === "create") {
+        return Object.assign(auth, {
+            name: document.getElementById("function-name").value.trim(),
+            description: document.getElementById("function-desc").value.trim(),
+            siteId: document.getElementById("create-site-id").value.trim(),
+            code: document.getElementById("create-code").value,
+            envText: document.getElementById("create-env").value.trim(),
+            publicKeys: document.getElementById("create-public-keys").value,
+            headersText: document.getElementById("create-headers").value,
+            compat: document.getElementById("create-compat").value.trim()
+        });
+    }
+    return Object.assign(auth, {
+        functionId: document.getElementById("function-id").value.trim(),
+        versionId: document.getElementById("version-id").value.trim(),
+        code: document.getElementById("update-code").value,
+        envText: document.getElementById("update-env").value.trim(),
+        publicKeys: document.getElementById("update-public-keys").value,
+        headersText: document.getElementById("update-headers").value,
+        compat: document.getElementById("update-compat").value.trim()
+    });
+}
+
+// Ask the Glia Function to list functions on the site so the operator can pick one.
 async function listFunctions() {
     try {
         setStatus("Listing functions");
@@ -207,16 +212,9 @@ async function listFunctions() {
         if (!siteId) {
             throw new Error("Site ID is required to list functions.");
         }
-        const token = await ensureToken();
-        const result = await gliaFetch(baseUrlValue() + "/functions?site_ids[]=" + encodeURIComponent(siteId), {
-            method: "GET",
-            headers: authHeaders(token)
-        });
-        if (!result.response.ok) {
-            throw new Error(apiError(result.response, result.data, "Could not list functions."));
-        }
-        renderFunctionChoices(result.data.functions || []);
-        logOutput("Listed " + (result.data.functions || []).length + " function(s).");
+        const result = await callFunction("listFunctions", Object.assign(collectAuth(), { siteId: siteId }));
+        renderFunctionChoices(result.functions || []);
+        logOutput("Listed " + (result.functions || []).length + " function(s).");
         setStatus("Ready");
     } catch (error) {
         logOutput("List functions failed: " + error.message, true);
@@ -248,7 +246,7 @@ function renderFunctionChoices(functions) {
     });
 }
 
-// GET /functions/{id}/versions so the operator can pick the base version.
+// Ask the Glia Function to list versions so the operator can pick the base version.
 async function listVersions() {
     try {
         setStatus("Listing versions");
@@ -256,22 +254,8 @@ async function listVersions() {
         if (!functionId) {
             throw new Error("Function ID is required to list versions.");
         }
-        const token = await ensureToken();
-        const result = await gliaFetch(baseUrlValue() + "/functions/" + encodeURIComponent(functionId) + "/versions", {
-            method: "GET",
-            headers: authHeaders(token)
-        });
-        if (!result.response.ok) {
-            throw new Error(apiError(result.response, result.data, "Could not list versions."));
-        }
-        const versions = result.data.function_versions || result.data.versions || [];
-        // The version list does not say which one is live. The function record does.
-        const fetched = await gliaFetch(baseUrlValue() + "/functions/" + encodeURIComponent(functionId), {
-            method: "GET",
-            headers: authHeaders(token)
-        });
-        const activeId = fetched.response.ok ? currentVersionId(fetched.data) : "";
-        renderVersionChoices(versions, activeId);
+        const result = await callFunction("listVersions", Object.assign(collectAuth(), { functionId: functionId }));
+        renderVersionChoices(result.versions || [], result.activeId || "");
         setStatus("Ready");
     } catch (error) {
         logOutput("List versions failed: " + error.message, true);
@@ -386,21 +370,20 @@ async function handleTriggerClick() {
     setStatus("Running");
 
     try {
-        // Check the form before asking Glia for a token.
         validateMode();
-        const token = await ensureToken();
-        const headers = authHeaders(token);
-        const baseUrl = baseUrlValue();
-        batchSummary.push({ item: "site token", action: "Fetch bearer token", status: "Success" });
-
-        if (mode === "create") {
-            invocationUri = await runCreate(baseUrl, headers, batchSummary);
-        } else if (mode === "update") {
-            invocationUri = await runUpdate(baseUrl, headers, batchSummary);
-        } else {
-            throw new Error("Choose make or update before running.");
+        document.getElementById("deploy-stay").textContent = stayBase() + " The Glia Function is creating the version and setting it current. Stay on this page.";
+        const result = await callFunction(mode, collectPayload());
+        (result.logs || []).forEach(function (line) {
+            logOutput(line);
+        });
+        (result.summary || []).forEach(function (row) {
+            batchSummary.push(row);
+        });
+        invocationUri = result.invocationUri || "";
+        if (result.versionId) {
+            noteVersionDiscovered(result.versionId);
+            noteVersionCurrent(result.versionId);
         }
-
         logOutput("BATCH JOB FINISHED");
         if (invocationUri) {
             logOutput("Invocation URI: " + invocationUri);
@@ -421,6 +404,12 @@ async function handleTriggerClick() {
             disarmStayWarning();
             document.getElementById("deploy-status-title").textContent = "Deploy stopped";
             document.getElementById("deploy-stay").textContent = "The deploy stopped before the version was current. You can leave this page.";
+            (error.logs || []).forEach(function (line) {
+                logOutput(line);
+            });
+            (error.summary || []).forEach(function (row) {
+                batchSummary.push(row);
+            });
             logOutput("CRITICAL ERROR: " + error.message);
             if (batchSummary.length) {
                 renderSummaryTable(batchSummary);
@@ -471,166 +460,6 @@ function validateMode() {
     throw new Error("Choose make or update before running.");
 }
 
-// POST /functions, POST /versions, poll the task, POST /deployments.
-async function runCreate(baseUrl, headers, batchSummary) {
-    const name = document.getElementById("function-name").value.trim();
-    const description = document.getElementById("function-desc").value.trim();
-    const siteId = document.getElementById("create-site-id").value.trim();
-    const code = document.getElementById("create-code").value;
-    assertCode(code);
-
-    const versionBody = { code: code };
-    addOptionalVersionFields(versionBody, {
-        envText: document.getElementById("create-env").value.trim(),
-        allowNull: false,
-        publicKeys: document.getElementById("create-public-keys").value,
-        headersText: document.getElementById("create-headers").value,
-        compat: document.getElementById("create-compat").value.trim()
-    });
-
-    logOutput("[1/4] Create function entity");
-    const created = await gliaFetch(baseUrl + "/functions", {
-        method: "POST",
-        headers: headers,
-        body: JSON.stringify({ site_id: siteId, name: name, description: description })
-    });
-    if (!created.response.ok || !created.data.id) {
-        pushFail(batchSummary, name, "Create function");
-        throw new Error(apiError(created.response, created.data, "Create function failed."));
-    }
-    batchSummary.push({ item: name, action: "Create function " + created.data.id, status: "Success" });
-    logOutput("   -> Function ID: " + created.data.id);
-    if (created.data.invocation_uri) {
-        logOutput("   -> Invocation URI: " + created.data.invocation_uri);
-    }
-
-    logOutput("[2/4] Create version (starts a job)");
-    const task = await gliaFetch(baseUrl + "/functions/" + created.data.id + "/versions", {
-        method: "POST",
-        headers: headers,
-        body: JSON.stringify(versionBody)
-    });
-    if (task.response.status !== 202 && !task.response.ok) {
-        pushFail(batchSummary, created.data.id, "Create version");
-        throw new Error(apiError(task.response, task.data, "Create version failed."));
-    }
-    batchSummary.push({ item: created.data.id, action: "Create version task", status: task.data.status || "processing" });
-
-    logOutput("[3/4] Wait for the version job");
-    const versionId = await pollVersionTask(baseUrl, headers, task.data);
-    batchSummary.push({ item: versionId, action: "Version ready", status: "Success" });
-
-    logOutput("[4/4] Set version 1 as the current version");
-    const deployed = await deployCurrent(baseUrl, headers, created.data.id, versionId);
-    batchSummary.push({ item: versionId, action: "Set current version", status: "Success" });
-    return deployed.invocation_uri || created.data.invocation_uri || "";
-}
-
-// PATCH /versions/{base}, poll, then POST /deployments. The URI does not change.
-async function runUpdate(baseUrl, headers, batchSummary) {
-    const functionId = document.getElementById("function-id").value.trim();
-    const versionId = document.getElementById("version-id").value.trim();
-    const code = document.getElementById("update-code").value;
-    const envText = document.getElementById("update-env").value.trim();
-    if (code.trim()) {
-        assertCode(code);
-    }
-
-    const versionBody = {};
-    if (code.trim()) {
-        versionBody.code = code;
-    }
-    addOptionalVersionFields(versionBody, {
-        envText: envText,
-        allowNull: true,
-        publicKeys: document.getElementById("update-public-keys").value,
-        headersText: document.getElementById("update-headers").value,
-        compat: document.getElementById("update-compat").value.trim()
-    });
-
-    logOutput("[1/3] Create a new version from " + versionId);
-    const task = await gliaFetch(baseUrl + "/functions/" + encodeURIComponent(functionId) + "/versions/" + encodeURIComponent(versionId), {
-        method: "PATCH",
-        headers: headers,
-        body: JSON.stringify(versionBody)
-    });
-    if (task.response.status !== 202 && !task.response.ok) {
-        pushFail(batchSummary, versionId, "Update version");
-        throw new Error(apiError(task.response, task.data, "Update version failed."));
-    }
-    batchSummary.push({ item: versionId, action: "Update version task", status: task.data.status || "processing" });
-
-    logOutput("[2/3] Wait for the version job");
-    const newVersionId = await pollVersionTask(baseUrl, headers, task.data);
-    batchSummary.push({ item: newVersionId, action: "Version ready", status: "Success" });
-
-    logOutput("[3/3] Set current version");
-    const deployed = await deployCurrent(baseUrl, headers, functionId, newVersionId);
-    batchSummary.push({ item: newVersionId, action: "Set current version", status: "Success" });
-    logOutput("   -> Invocation URI is unchanged by this swap.");
-    return deployed.invocation_uri || "";
-}
-
-// POST /functions/{id}/deployments, then read the function back.
-// The deploy response only contains invocation_uri. That URI already existed
-// from function creation, so it does not prove which version is current.
-async function deployCurrent(baseUrl, headers, functionId, versionId) {
-    const deployed = await gliaFetch(baseUrl + "/functions/" + encodeURIComponent(functionId) + "/deployments", {
-        method: "POST",
-        headers: headers,
-        body: JSON.stringify({ version_id: versionId })
-    });
-    if (!deployed.response.ok) {
-        throw new Error(apiError(deployed.response, deployed.data, "Setting the current version failed."));
-    }
-    logOutput("   -> Checking that this version is current.");
-    const fetched = await gliaFetch(baseUrl + "/functions/" + encodeURIComponent(functionId), {
-        method: "GET",
-        headers: headers
-    });
-    if (!fetched.response.ok) {
-        throw new Error(apiError(fetched.response, fetched.data, "Could not read the function after deploy."));
-    }
-    const currentId = currentVersionId(fetched.data);
-    // A missing field still counts when the version id is somewhere in the record.
-    const bodyNamesVersion = (fetched.raw || "").indexOf(versionId) !== -1;
-    if (currentId && currentId !== versionId) {
-        throw new Error("The function's current version is " + currentId + ", not " + versionId + ".");
-    }
-    if (!currentId && !bodyNamesVersion) {
-        throw new Error("Deploy returned " + deployed.response.status + " but the function record does not list " + versionId + " as the current version.");
-    }
-    logOutput("   -> Current version confirmed: " + (currentId || versionId));
-    // Outside the console, so the operator sees it without reading the log.
-    noteVersionCurrent(currentId || versionId);
-    return deployed.data;
-}
-
-// Pull a current-version id out of GET /functions/{id}, whatever key Glia used.
-function currentVersionId(data) {
-    if (!data || typeof data !== "object") {
-        return "";
-    }
-    const directKeys = ["current_version_id", "deployed_version_id", "version_id"];
-    for (let i = 0; i < directKeys.length; i++) {
-        const value = data[directKeys[i]];
-        if (typeof value === "string" && value) {
-            return value;
-        }
-    }
-    const nestedKeys = ["current_version", "deployed_version", "version"];
-    for (let i = 0; i < nestedKeys.length; i++) {
-        const value = data[nestedKeys[i]];
-        if (typeof value === "string" && value) {
-            return value;
-        }
-        if (value && typeof value.id === "string") {
-            return value.id;
-        }
-    }
-    return "";
-}
-
 // Show the warning and block an accidental refresh until the version is current.
 function armStayWarning() {
     runActive = true;
@@ -677,22 +506,6 @@ function stayBase() {
     return "Stay on this page until the new version is deployed. Do not refresh, go back, or close this tab.";
 }
 
-// Updates the banner once a second during the opening wait. The console stays quiet.
-async function countdownToFirstPoll() {
-    const seconds = FIRST_POLL_MS / 1000;
-    for (let left = seconds; left > 0; left--) {
-        if (!runActive) {
-            throw new Error("Deploy stopped before the version was current. Stay on the page and run it again.");
-        }
-        document.getElementById("deploy-stay").textContent = stayBase() + " First check in " + left + " seconds.";
-        await sleep(1000);
-    }
-}
-
-function setStayCountdown(extra) {
-    document.getElementById("deploy-stay").textContent = stayBase() + " " + extra;
-}
-
 // Shown above the log as soon as the task returns a version id.
 function noteVersionDiscovered(versionId) {
     const line = document.getElementById("deploy-version-line");
@@ -713,146 +526,6 @@ function noteVersionCurrent(versionId) {
     disarmStayWarning();
 }
 
-// GET the task URI until it is completed or failed. One request at a time.
-async function pollVersionTask(baseUrl, headers, task) {
-    let current = task || {};
-    const selfPath = current.self;
-    if (!selfPath) {
-        throw new Error("Version task did not return a self URI to poll.");
-    }
-    // Use the path exactly as returned. Only the base URL is joined in front.
-    const taskUrl = selfPath.indexOf("http") === 0 ? selfPath : baseUrl + selfPath;
-
-    logOutput("   -> Waiting for the version.");
-    // One long wait, with a countdown on the banner, instead of eight early checks.
-    await countdownToFirstPoll();
-    const firstId = await readVersionOnce(baseUrl, headers, taskUrl, selfPath, 1);
-    if (firstId) {
-        noteVersionDiscovered(firstId);
-        return firstId;
-    }
-    for (let attempt = 1; attempt <= LATER_POLL_LIMIT; attempt++) {
-        if (!runActive) {
-            throw new Error("Deploy stopped before the version was current. Stay on the page and run it again.");
-        }
-        setStayCountdown("Next check in 1 second.");
-        await sleep(LATER_POLL_MS);
-        const versionId = await readVersionOnce(baseUrl, headers, taskUrl, selfPath, attempt + 1);
-        if (versionId) {
-            noteVersionDiscovered(versionId);
-            return versionId;
-        }
-    }
-    throw new Error("Version is still processing. Poll this task later: " + selfPath);
-}
-
-// One GET of the task. Returns the version id when the job is done, or "" while it is still processing.
-async function readVersionOnce(baseUrl, headers, taskUrl, selfPath, attempt) {
-    if (!runActive) {
-        throw new Error("Deploy stopped before the version was current. Stay on the page and run it again.");
-    }
-    const polled = await gliaFetch(taskUrl, { method: "GET", headers: headers });
-    // 303 See Other means the job finished. response.ok is false for it.
-    if (polled.response.status === 303 || (polled.response.status >= 300 && polled.response.status < 400)) {
-        const versionId = await versionIdFrom303(baseUrl, headers, polled, selfPath);
-        logOutput("   -> Version ID: " + versionId);
-        return versionId;
-    }
-    if (!polled.response.ok) {
-        throw new Error(apiError(polled.response, polled.data, "Could not read the version task."));
-    }
-    // If the browser followed the 303, this response is the version itself.
-    const redirectedId = versionIdFromPath(polled.response.url);
-    if (redirectedId && polled.data.status !== "processing" && polled.data.status !== "failed") {
-        logOutput("   -> Version ID: " + redirectedId);
-        return redirectedId;
-    }
-    if (polled.data.status === "completed") {
-        const versionId = polled.data.entity && polled.data.entity.id;
-        if (!versionId) {
-            throw new Error("Version task completed without a version id.");
-        }
-        logOutput("   -> Version ID: " + versionId);
-        return versionId;
-    }
-    if (polled.data.status === "failed") {
-        throw new Error("Version creation failed. Task: " + selfPath);
-    }
-    return "";
-}
-
-// A finished version job answers 303. Pull the version id out of that response.
-async function versionIdFrom303(baseUrl, headers, polled, selfPath) {
-    const data = polled.data || {};
-    if (data.status === "failed") {
-        throw new Error("Version creation failed. Task: " + selfPath);
-    }
-    // Completed task JSON riding along in the 303 body.
-    if (data.entity && data.entity.id) {
-        return data.entity.id;
-    }
-    // Location is the version URI when the browser is allowed to read it.
-    const location = polled.response.headers.get("Location") || polled.response.headers.get("location") || "";
-    const fromLocation = versionIdFromPath(location);
-    if (fromLocation) {
-        return fromLocation;
-    }
-    const fromHref = versionIdFromPath(data.entity && data.entity.href);
-    if (fromHref) {
-        return fromHref;
-    }
-    // The function id is inside the task path. Its newest version is the one
-    // this job just created when the 303 body did not name it.
-    const functionId = functionIdFromTaskPath(selfPath);
-    if (functionId) {
-        const listed = await gliaFetch(baseUrl + "/functions/" + encodeURIComponent(functionId) + "/versions", {
-            method: "GET",
-            headers: headers
-        });
-        if (listed.response.ok) {
-            const versions = listed.data.function_versions || listed.data.versions || [];
-            const newest = versions.slice().sort(function (a, b) {
-                return String(b.created_at || "").localeCompare(String(a.created_at || ""));
-            })[0];
-            if (newest && newest.id) {
-                logOutput("   -> 303 had no version id. Using the newest listed version.");
-                return newest.id;
-            }
-        }
-    }
-    throw new Error("Version job finished (303) but no version id was readable. List versions for this function and deploy the newest one. Task: " + selfPath);
-}
-
-// "/functions/{functionId}/versions/{versionId}" -> version id.
-function versionIdFromPath(path) {
-    const match = String(path || "").match(/\/versions\/([0-9a-fA-F-]{36})/);
-    return match ? match[1] : "";
-}
-
-// "/functions/{functionId}/tasks/{taskId}" -> function id.
-function functionIdFromTaskPath(path) {
-    const match = String(path || "").match(/\/functions\/([0-9a-fA-F-]{36})\/tasks\//);
-    return match ? match[1] : "";
-}
-
-// Shared optional fields for both POST /versions and PATCH /versions/{id}.
-function addOptionalVersionFields(body, fields) {
-    if (fields.envText) {
-        body.environment_variables = parseEnv(fields.envText, fields.allowNull);
-    }
-    const publicKeys = splitList(fields.publicKeys);
-    if (publicKeys) {
-        body.public_environment_variable_keys = publicKeys;
-    }
-    const allowlist = parseHeaderAllowlist(fields.headersText);
-    if (allowlist) {
-        body.header_allowlist = allowlist;
-    }
-    if (fields.compat) {
-        body.compatibility_date = fields.compat;
-    }
-}
-
 function assertCode(code) {
     if (code.indexOf("onInvoke") === -1) {
         throw new Error("Function code must define onInvoke.");
@@ -862,72 +535,8 @@ function assertCode(code) {
     }
 }
 
-// Create requires string values. Update also allows null, which deletes a key.
-function parseEnv(text, allowNull) {
-    let parsed;
-    try {
-        parsed = JSON.parse(text);
-    } catch (error) {
-        throw new Error("Environment variables are not valid JSON.");
-    }
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-        throw new Error("Environment variables must be a JSON object.");
-    }
-    Object.keys(parsed).forEach((key) => {
-        const value = parsed[key];
-        const ok = typeof value === "string" || (allowNull && value === null);
-        if (!ok) {
-            throw new Error("Environment variable " + key + " must be a string" + (allowNull ? " or null." : "."));
-        }
-    });
-    if (byteLength(JSON.stringify(parsed)) > MAX_ENV_BYTES) {
-        throw new Error("Environment variables are over 4,000 bytes.");
-    }
-    return parsed;
-}
-
-// "[]" clears the allowlist on update. A blank field means "do not send it".
-function parseHeaderAllowlist(text) {
-    const trimmed = text.trim();
-    if (!trimmed) {
-        return null;
-    }
-    if (trimmed === "[]") {
-        return [];
-    }
-    const names = splitList(trimmed);
-    if (names && names.length > MAX_HEADERS) {
-        throw new Error("Header allowlist can have at most 30 headers.");
-    }
-    return names;
-}
-
-function splitList(text) {
-    const names = text.split(",").map((part) => part.trim()).filter((part) => part.length > 0);
-    return names.length ? names : null;
-}
-
 function byteLength(text) {
     return new TextEncoder().encode(text).length;
-}
-
-function pushFail(summary, item, action) {
-    summary.push({ item: item, action: action, status: "Failed" });
-}
-
-async function gliaFetch(url, options) {
-    const response = await fetch(url, options);
-    // Raw text is kept so a finished deploy can be checked for the version id.
-    const raw = await response.text();
-    let data = {};
-    if (raw) {
-        try {
-            data = JSON.parse(raw);
-        } catch (error) {
-            data = { message: raw.slice(0, 180) };
-        }
-    }
-    return { response: response, data: data, raw: raw };
 }
 
 async function readJson(response) {
@@ -940,17 +549,6 @@ async function readJson(response) {
     } catch (error) {
         return { message: text.slice(0, 180) };
     }
-}
-
-function apiError(response, data, fallback) {
-    const detail = data.message || data.error || data.error_message || fallback;
-    return response.status + " " + detail;
-}
-
-function sleep(ms) {
-    return new Promise((resolve) => {
-        setTimeout(resolve, ms);
-    });
 }
 
 function renderSummaryTable(summary) {
@@ -994,14 +592,10 @@ function auditAction() {
 
 // The invocation path from Glia, or the API base when the run never got that far.
 function auditUrl(invocationUri) {
-    const base = baseUrlValue() || "https://api.glia.com";
-    if (!invocationUri) {
-        return base;
-    }
-    if (invocationUri.indexOf("http") === 0) {
+    if (invocationUri && invocationUri.indexOf("http") === 0) {
         return invocationUri;
     }
-    return base + (invocationUri.charAt(0) === "/" ? invocationUri : "/" + invocationUri);
+    return FUNCTIONS_DEPLOY_URI || "https://api.glia.com";
 }
 
 // Console transcript plus one line per summary row. This is finalReport.
