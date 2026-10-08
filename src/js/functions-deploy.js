@@ -24,14 +24,17 @@ let mode = "";
 let resetStep = 0;
 // Console text kept for the audit row.
 let finalReport = "";
-let userMail = "support@glia.com";
+// Survives Reset session so a run that was cleared still writes one audit row.
+let sealedReport = "";
 // True only while a deploy is still waiting on this page.
 let runActive = false;
 // Bumped on reset so an in-flight run does not write into a cleared page.
 let runSerial = 0;
 
-const writeLogURL = "https://api.glia.com/integrations/f026a5b6-ba81-4211-99e1-3667bbaf16e9/endpoint";
+// dynamo_write_audittable. The Audit Logs page reads these rows back on its own.
+const WRITE_LOG_URI = "https://api.glia.com/integrations/f026a5b6-ba81-4211-99e1-3667bbaf16e9/endpoint";
 const AUDIT_SITE_ID = "a5c110f6-a4a5-47d9-bbf1-d03d7a5e5089";
+// Must match the Functions Deploy option in src/audit-logs.html.
 const AUTOMATION_NAME = "Functions Deploy";
 
 // Check 9 used to be the one that finished, at 2 seconds apart: about 18 seconds.
@@ -403,24 +406,37 @@ async function handleTriggerClick() {
             logOutput("Invocation URI: " + invocationUri);
         }
         renderSummaryTable(batchSummary);
-        await saveExecutionLog("Success", batchSummary, Date.now() - startedAt, invocationUri);
+        await writeAuditLog({
+            action: auditAction(),
+            status: "Success",
+            finalReport: executionReport(batchSummary),
+            url: auditUrl(invocationUri),
+            durationMs: Date.now() - startedAt
+        });
         triggerButton.textContent = "Completed";
         setStatus("Success");
     } catch (error) {
-        if (runId !== runSerial) {
-            return;
+        const cancelled = runId !== runSerial;
+        if (!cancelled) {
+            disarmStayWarning();
+            document.getElementById("deploy-status-title").textContent = "Deploy stopped";
+            document.getElementById("deploy-stay").textContent = "The deploy stopped before the version was current. You can leave this page.";
+            logOutput("CRITICAL ERROR: " + error.message);
+            if (batchSummary.length) {
+                renderSummaryTable(batchSummary);
+            }
+            triggerButton.textContent = "Retry";
+            triggerButton.disabled = !confirmBox.checked;
+            setStatus("Failed");
         }
-        disarmStayWarning();
-        document.getElementById("deploy-status-title").textContent = "Deploy stopped";
-        document.getElementById("deploy-stay").textContent = "The deploy stopped before the version was current. You can leave this page.";
-        logOutput("CRITICAL ERROR: " + error.message);
-        if (batchSummary.length) {
-            renderSummaryTable(batchSummary);
-        }
-        triggerButton.textContent = "Retry";
-        triggerButton.disabled = !confirmBox.checked;
-        setStatus("Failed");
-        await saveExecutionLog("Failed", batchSummary, Date.now() - startedAt, invocationUri);
+        // Success and failure each write one row, including a run stopped by Reset.
+        await writeAuditLog({
+            action: auditAction(),
+            status: "Failed",
+            finalReport: executionReport(batchSummary) || "Run stopped before it finished.",
+            url: auditUrl(invocationUri),
+            durationMs: Date.now() - startedAt
+        });
     }
 }
 
@@ -972,40 +988,75 @@ function renderSummaryTable(summary) {
     finalReport += "Summary table rendered.\n";
 }
 
-async function saveExecutionLog(status, summary, durationMs, invocationUri) {
-    const lines = summary.map((item) => {
+function auditAction() {
+    return mode === "update" ? "Update Glia Function" : "Create Glia Function";
+}
+
+// The invocation path from Glia, or the API base when the run never got that far.
+function auditUrl(invocationUri) {
+    const base = baseUrlValue() || "https://api.glia.com";
+    if (!invocationUri) {
+        return base;
+    }
+    if (invocationUri.indexOf("http") === 0) {
+        return invocationUri;
+    }
+    return base + (invocationUri.charAt(0) === "/" ? invocationUri : "/" + invocationUri);
+}
+
+// Console transcript plus one line per summary row. This is finalReport.
+function executionReport(summary) {
+    const lines = (summary || []).map(function (item) {
         return "Item: " + item.item + " Action: " + item.action + " Status: " + item.status;
     });
-    const payload = {
-        siteId: AUDIT_SITE_ID,
-        userId: userMail,
-        action: mode === "update" ? "Update Glia Function" : "Create Glia Function",
-        automation: AUTOMATION_NAME,
-        status: status,
-        url: invocationUri || "",
-        durationMs: durationMs,
-        finalReport: finalReport + "\n" + lines.join("\n")
-    };
+    const transcript = (finalReport || sealedReport || "").trim();
+    if (!lines.length) {
+        return transcript;
+    }
+    return (transcript ? transcript + "\n" : "") + lines.join("\n");
+}
 
+// One DynamoDB row per run. Fields match the demo write_log contract.
+// timestamp#id, invokerId, invokerType, createdAt, and expiresAt are added by write_log.
+async function writeAuditLog({ action, status, finalReport = "", url = "", durationMs = 0 }) {
     try {
         const glia = await window.getGliaApi({ version: "v1" });
         const headers = await glia.getRequestHeaders();
         headers["Content-Type"] = "application/json";
         const user = await glia.getUser().catch(() => null);
-        if (user && user.email) {
-            userMail = user.email;
-            payload.userId = userMail;
-        }
-        const response = await fetch(writeLogURL, {
+        const res = await fetch(WRITE_LOG_URI, {
             method: "POST",
             headers: headers,
-            body: JSON.stringify(payload)
+            body: JSON.stringify({
+                siteId: AUDIT_SITE_ID,
+                userId: user && user.email ? user.email : "support@glia.com",
+                action: action,
+                automation: AUTOMATION_NAME,
+                status: status,
+                url: url,
+                finalReport: finalReport,
+                durationMs: Number(durationMs)
+            })
         });
-        const result = await readJson(response);
-        logOutput(result.success ? "Audit log saved." : "Audit log failed: " + (result.error || "Unknown error"));
-    } catch (error) {
-        logOutput("Audit log skipped. Open this page inside Glia Hub to record the run.");
+        const result = await res.json();
+        if (!result.success) {
+            console.error("Audit log failed:", result.error);
+            noteAudit("Audit log failed: " + (result.error || "Unknown error"));
+            return;
+        }
+        noteAudit("Audit log saved.");
+    } catch (err) {
+        console.error("Could not reach the audit log function", err);
+        noteAudit("Audit log skipped. Open this page inside Glia Hub to record the run.");
     }
+}
+
+// A reset already cleared the page. Do not write the audit result back onto the choice screen.
+function noteAudit(message) {
+    if (document.getElementById("workspace").classList.contains("hidden")) {
+        return;
+    }
+    logOutput(message);
 }
 
 function logOutput(message, clear) {
@@ -1016,6 +1067,7 @@ function logOutput(message, clear) {
     outputConsole.appendChild(document.createTextNode(message + "\n"));
     outputConsole.scrollTop = outputConsole.scrollHeight;
     finalReport += message + "\n";
+    sealedReport = finalReport;
 }
 
 function setStatus(text) {
