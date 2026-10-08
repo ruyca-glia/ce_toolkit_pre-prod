@@ -95,7 +95,22 @@
                         </div>
                         <span class="tool-arrow">→</span>
                     </a>
-                    <!-- Functions Deploy: the only new card on the existing dashboard -->
+                    <!-- Site Cloning is its own card. The anchor, info block, and arrow
+                         all have to close here. Leaving them open pulled the next two
+                         tools inside this card, so Site Cloning rendered twice and
+                         Functions Deploy sat in the same box as Operator Multi-Site Assigner. -->
+                    <a href="./src/site_cloning.html" class="tool-card">
+                        <!-- Icon shown on the left of the card -->
+                        <div class="tool-icon">❖</div>
+                        <!-- Title and short description for this tool -->
+                        <div class="tool-info">
+                            <h3>Site Cloning</h3>
+                            <p>Clone a Staging site to Production.</p>
+                        </div>
+                        <!-- Arrow that marks the card as a link -->
+                        <span class="tool-arrow">→</span>
+                    </a>
+                    <!-- Functions Deploy is a separate grid item, not a child of Site Cloning. -->
                     <a href="./src/functions-deploy.html" class="tool-card">
                         <div class="tool-icon">🚀</div>
                         <div class="tool-info">
@@ -104,6 +119,16 @@
                         </div>
                         <span class="tool-arrow">→</span>
                     </a>
+                    <!-- Operator Multi-Site Assigner is its own card beside the others. -->
+                    <a href="./src/site-assigner.html" class="tool-card">
+                        <div class="tool-icon">🏢</div>
+                        <div class="tool-info">
+                            <h3>Operator Multi-Site Assigner</h3>
+                            <p>Look up operators by email and add them to one or more sites.</p>
+                        </div>
+                        <span class="tool-arrow">→</span>
+                    </a>
+                    <!-- Temporary Docs Link is its own card. Close the anchor here so the next tool stays a separate link. -->
                     <a href="./src/temp-docs.html" class="tool-card">
                         <div class="tool-icon">📄</div>
                         <div class="tool-info">
@@ -122,6 +147,7 @@
                     rel="noopener noreferrer">here</a>
             </p>
         </footer>
+    </div>
 
 </body>
 

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CE Toolkit — Site Cloning</title>
+    <link rel="stylesheet" href="./css/style.css">
+    <link rel="stylesheet" href="./css/tool-page.css">
+    <link rel="stylesheet" href="./css/site_cloning.css">
+    <script async src="https://api.glia.com/salemove_integration.js"></script>
+    <script type="text/javascript" src="//libs.glia.com/axon.js"></script>
+    <script src="./js/site_cloning.js" defer></script>
+</head>
+
+<body>
+    <header class="header">
+        <div class="header-content">
+            <a href="../index.html" class="back-link">← Back to Dashboard</a>
+            <span class="team-badge">Work in progress</span>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="tool-header">
+            <div class="tool-icon-large">❖</div>
+            <div>
+                <h1>Site Cloning</h1>
+                <p>Clone a Staging site to Production.</p>
+            </div>
+        </div>
+
+        <section class="panel">
+            <h2>Clone to Production</h2>
+            <form id="cloning-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="site-id">Site ID*</label>
+                        <input type="text" id="site-id" placeholder="1234-abc-5678-xyz" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="site-name">Site Name*</label>
+                        <input type="text" id="site-name" placeholder="FI Production" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="site-address">Site Address*</label>
+                        <input type="text" id="site-address" placeholder="cloningdummy.com" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="bearer-token">Bearer Token*</label>
+                        <input type="password" id="bearer-token" placeholder="token" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="base-url">Base URL</label>
+                        <input type="text" id="base-url" placeholder="https://api.glia.com">
+                    </div>
+                </div>
+                <div>
+                    <button type="submit" class="btn btn-primary" id="run-cloning">Run Cloning</button>
+                </div>
+                <div id="error"></div>
+            </form>
+        </section>
+
+        <section class="panel">
+            <h2>Output</h2>
+            <div class="output-container">
+                <div class="output-header">
+                    <span class="output-status">Ready</span>
+                    <button class="btn btn-small" id="clear-output">Clear</button>
+                </div>
+                <pre class="output-console" id="output">Waiting…</pre>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>Internal Tools v1.0 · For authorized team members only</p>
+    </footer>
+</body>
+
+</html>

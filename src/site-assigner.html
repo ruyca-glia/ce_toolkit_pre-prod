@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CE Toolkit — Operator Multi-Site Assigner</title>
+    <link rel="stylesheet" href="./css/style.css">
+    <link rel="stylesheet" href="./css/automations.css">
+    <link rel="stylesheet" href="./css/tool-page.css">
+    <script async src="https://api.glia.com/salemove_integration.js"></script>
+    <script type="text/javascript" src="//libs.glia.com/axon.js"></script>
+    <script src="./js/site-assigner.js" defer></script>
+    <style>
+        .tool-header .legacy-admin-note {
+            margin: 0.5rem 0 0;
+            color: #1d4ed8;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 6px;
+            padding: 0.45rem 0.7rem;
+            font-size: 0.875rem;
+        }
+
+        /* One card per operator so the site lists stay on the page. */
+        .assign-results {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .assign-result {
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            padding: 0.85rem 1rem;
+            background: #fff;
+        }
+
+        .assign-result-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .assign-result-email {
+            font-weight: 600;
+            color: var(--gray-700);
+        }
+
+        .assign-result-meta {
+            margin: 0.35rem 0 0.75rem;
+            color: var(--gray-500);
+            font-size: 0.8125rem;
+        }
+
+        .assign-sites {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
+        }
+
+        @media (min-width: 720px) {
+            .assign-sites {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        .assign-sites h3 {
+            margin: 0 0 0.4rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--gray-500);
+        }
+
+        .assign-error {
+            margin: 0;
+            color: #dc2626;
+            font-size: 0.875rem;
+        }
+
+        /* One site id per chip, stacked, so long ids do not run together. */
+        .site-id-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.45rem;
+        }
+
+        .site-id-chip {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.2rem;
+            padding: 0.45rem 0.65rem;
+            border: 1px solid var(--gray-200);
+            border-radius: 6px;
+            background: var(--gray-50);
+        }
+
+        .site-id-chip code {
+            font-family: "SF Mono", Monaco, "Courier New", monospace;
+            font-size: 0.75rem;
+            line-height: 1.45;
+            color: var(--gray-700);
+        }
+
+        /* The site this run added. */
+        .site-id-chip-added {
+            border-color: rgba(16, 185, 129, 0.45);
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        /* The operator already had this site, so nothing new was attached. */
+        .site-id-chip-already {
+            border-color: rgba(245, 158, 11, 0.5);
+            background: rgba(245, 158, 11, 0.1);
+        }
+
+        .site-id-tag {
+            font-size: 0.65rem;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #059669;
+        }
+
+        .site-id-chip-already .site-id-tag {
+            color: #b45309;
+        }
+
+        .site-id-empty {
+            color: var(--gray-500);
+            font-size: 0.8125rem;
+        }
+    </style>
+</head>
+
+<body>
+    <header class="header">
+        <div class="header-content">
+            <a href="../index.html" class="back-link">← Back to Dashboard</a>
+            <button class="btn btn-secondary btn-small" id="reset-session" type="button">Reset session</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="tool-header">
+            <div class="tool-icon-large">🏢</div>
+            <div>
+                <h1>Operator Multi-Site Assigner</h1>
+                <p class="legacy-admin-note"><strong>NOTE:</strong> Only users with access to Legacy Admin can perform this.</p>
+                <p>Look up operators by email and add them to one or more sites. Existing site assignments stay.</p>
+            </div>
+        </div>
+
+        <section class="panel">
+            <h2>1 · Authenticate</h2>
+            <p class="form-hint" style="margin-bottom: 1rem;">Paste a bearer token, or leave that blank and exchange an API token for one. Neither value is saved after you leave or reset.</p>
+
+            <div class="form-group">
+                <label for="base-url">Base URL</label>
+                <input id="base-url" type="text" value="https://api.glia.com">
+                <span class="form-hint">Use https://api.glia.eu for Europe.</span>
+            </div>
+
+            <div class="form-group">
+                <label for="api-token">API token (optional)</label>
+                <input id="api-token" type="password" placeholder="Skip this if you already have a bearer" autocomplete="off" spellcheck="false">
+            </div>
+            <button class="btn btn-secondary" id="get-bearer" type="button">Get bearer</button>
+
+            <div class="form-group" style="margin-top: 1.25rem;">
+                <label for="bearer-token">Bearer token</label>
+                <input id="bearer-token" type="password" placeholder="Paste a bearer, or fill this with Get bearer" autocomplete="off" spellcheck="false">
+                <span class="form-hint">Hidden like a password. You can skip the API token and type a bearer here.</span>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>2 · Site to assign</h2>
+            <div class="form-group">
+                <label for="site-id">Site IDs</label>
+                <input id="site-id" type="text" placeholder="site-one, site-two">
+                <span class="form-hint">Separate site IDs with commas. Each one is added. Sites the operator already has are kept.</span>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>3 · Operators</h2>
+            <div class="form-group">
+                <label for="user-list">Paste a user list</label>
+                <textarea id="user-list" rows="8" placeholder="Any text. Emails ending in .com, .org, .net, or .bank are pulled out."></textarea>
+            </div>
+            <button class="btn btn-secondary" id="parse-list" type="button">Parse and preview</button>
+            <div id="preview" style="margin-top: 1rem;"></div>
+        </section>
+
+        <section class="panel">
+            <div class="form-group">
+                <label class="checkbox-option" for="confirm-run">
+                    <input id="confirm-run" type="checkbox">
+                    Everything looks correct. Proceed.
+                </label>
+            </div>
+            <button class="btn btn-primary" id="trigger-run" type="button" disabled>Assign sites</button>
+            <p id="stay-note" class="form-hint hidden" style="margin-top: 1rem;">Stay on this page until every operator has been updated.</p>
+        </section>
+
+        <section class="panel">
+            <h2>Results</h2>
+            <div id="result-table"></div>
+        </section>
+
+        <section class="panel">
+            <h2>Output</h2>
+            <div class="output-container">
+                <div class="output-header">
+                    <span class="output-status" id="output-status">Ready</span>
+                    <button class="btn btn-small" id="clear-output" type="button">Clear</button>
+                </div>
+                <pre class="output-console" id="output">Paste operators, then assign the site.</pre>
+            </div>
+        </section>
+    </main>
+
+    <div id="reset-dialog" class="hidden" style="position:fixed; inset:0; background:rgba(17,24,39,0.45); z-index:20; align-items:center; justify-content:center; padding:1rem;">
+        <section class="panel" style="max-width:420px; width:100%; margin:0;">
+            <h2>Are you sure you want to reset?</h2>
+            <p style="margin-bottom:1rem;">This clears the token, the bearer, the site, and the operator list.</p>
+            <button class="btn btn-primary" id="reset-yes" type="button">Yes, reset</button>
+            <button class="btn btn-secondary" id="reset-no" type="button">No</button>
+        </section>
+    </div>
+
+    <footer class="footer">
+        <p>Internal Tools v1.0 · For authorized team members only</p>
+    </footer>
+</body>
+
+</html>
