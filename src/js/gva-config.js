@@ -39,7 +39,7 @@ async function getJiraTickets() {
       userEmail: userMail,
     };
 
-    const response = await fetch(jiraIssuesUrl, {
+    const response = await fetch(jiraApiKeyIssuesUrl, {
       method: "POST",
       headers: headers,
       body: JSON.stringify(payload),
@@ -91,6 +91,6 @@ function logOutput(msg, clear = false) {
   outputConsole.scrollTop = outputConsole.scrollHeight;
 }
 
-async function fetchRecentExecutions() {
-  // Stub for history log fetching (will populate when building history table section)
-}
+// async function fetchRecentExecutions() {
+//   // Stub for history log fetching (will populate when building history table section)
+// }
