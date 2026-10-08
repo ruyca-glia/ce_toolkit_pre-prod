@@ -10090,7 +10090,7 @@ async function getJiraToken(env) {
     return cachedJiraToken;
   }
   const client = new SecretsManagerClient({
-    region: "us-east-2",
+    region: "us-east-1",
     credentials: {
       accessKeyId: env.AWS_ACCESS_KEY_ID,
       secretAccessKey: env.AWS_SECRET_ACCESS_KEY
@@ -10099,7 +10099,7 @@ async function getJiraToken(env) {
   console.log("got the secret credentials");
   try {
     const command2 = new GetSecretValueCommand({
-      SecretId: "arn:aws:secretsmanager:us-east-2:404410098344:secret:jira_token_w_full_access-fzCtJS"
+      SecretId: "arn:aws:secretsmanager:us-east-1:710190935322:secret:jira_token-ARHigW"
     });
     const response = await client.send(command2);
     const secret = JSON.parse(response.SecretString);
