@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CE Toolkit — Temporary Docs Link</title>
+    <link rel="stylesheet" href="./css/style.css">
+    <link rel="stylesheet" href="./css/automations.css">
+    <link rel="stylesheet" href="./css/tool-page.css">
+    <script async src="https://api.glia.com/salemove_integration.js"></script>
+    <script type="text/javascript" src="//libs.glia.com/axon.js"></script>
+    <script src="./js/temp-docs.js" defer></script>
+    <style>
+        .docs-link-card {
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            padding: 0.9rem 1rem;
+            background: #fff;
+        }
+
+        .docs-link-card a {
+            display: inline-block;
+            margin-top: 0.45rem;
+            word-break: break-all;
+            color: #1d4ed8;
+        }
+
+        .docs-link-meta {
+            margin: 0.35rem 0 0;
+            color: var(--gray-500);
+            font-size: 0.8125rem;
+        }
+
+        .tool-header .not-ready-note {
+            margin: 0.5rem 0 0;
+            color: #a16207;
+            background: #fef9c3;
+            border: 1px solid #fde047;
+            border-radius: 6px;
+            padding: 0.45rem 0.7rem;
+            font-size: 0.875rem;
+        }
+
+        .tool-header .not-ready-note strong {
+            color: inherit;
+        }
+    </style>
+</head>
+
+<body>
+    <header class="header">
+        <div class="header-content">
+            <a href="../index.html" class="back-link">← Back to Dashboard</a>
+            <button class="btn btn-secondary btn-small" id="reset-session" type="button">Reset session</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="tool-header">
+            <div class="tool-icon-large">📄</div>
+            <div>
+                <h1>Temporary Docs Link</h1>
+                <p>Ask the deployed function for a temporary link to the public docs.</p>
+                <p class="not-ready-note"><strong>NOTE:</strong> This is still not working yet.</p>
+            </div>
+        </div>
+
+        <section class="panel">
+            <h2>Who the link is for</h2>
+            <div class="form-group">
+                <label for="person-name">Name</label>
+                <input id="person-name" type="text" maxlength="50" placeholder="Ada Lovelace">
+                <span class="form-hint">1–50 characters. Sent to the function as name.</span>
+            </div>
+            <div class="form-group">
+                <label for="company-name">Company</label>
+                <input id="company-name" type="text" maxlength="50" placeholder="Glia">
+                <span class="form-hint">1–50 characters. Sent to the function as company.</span>
+            </div>
+            <div class="form-group">
+                <label for="docs-url">Docs URL (optional)</label>
+                <input id="docs-url" type="text" placeholder="https://docs.glia.com/how-to/installing-glia">
+                <span class="form-hint">Leave blank to link to the docs home page. The page must be on docs.glia.com.</span>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="form-group">
+                <label class="checkbox-option" for="confirm-run">
+                    <input id="confirm-run" type="checkbox">
+                    Everything looks correct. Proceed.
+                </label>
+            </div>
+            <button class="btn btn-primary" id="trigger-run" type="button" disabled>Create link</button>
+        </section>
+
+        <section class="panel">
+            <h2>Link</h2>
+            <div id="link-result"></div>
+        </section>
+
+        <section class="panel">
+            <h2>Output</h2>
+            <div class="output-container">
+                <div class="output-header">
+                    <span class="output-status" id="output-status">Ready</span>
+                    <button class="btn btn-small" id="clear-output" type="button">Clear</button>
+                </div>
+                <pre class="output-console" id="output">Fill in the form, then create the link.</pre>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>Internal Tools v1.0 · For authorized team members only</p>
+    </footer>
+</body>
+
+</html>
