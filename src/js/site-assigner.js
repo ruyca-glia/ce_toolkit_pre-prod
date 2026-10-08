@@ -1,7 +1,7 @@
 // Operator Multi-Site Assigner page.
-// For each pasted email: find the operator, keep their current sites, and add every site id.
-// The API token and the bearer stay in password fields. They are not saved in the browser.
-// Operators are updated one at a time. Every finished run writes one audit row.
+// The operator pastes emails, site ids, and a bearer or API token. This page
+// sends those to the Operator Multi-Site Assigner Glia Function. The function
+// looks up each operator and merges the site ids one operator at a time.
 
 const outputConsole = document.getElementById("output");
 const outputStatus = document.getElementById("output-status");
@@ -28,6 +28,9 @@ const WRITE_LOG_URI = "https://api.glia.com/integrations/f026a5b6-ba81-4211-99e1
 const AUDIT_SITE_ID = "a5c110f6-a4a5-47d9-bbf1-d03d7a5e5089";
 // Must match the Operator Multi-Site Assigner option in src/audit-logs.html.
 const AUTOMATION_NAME = "Operator Multi-Site Assigner";
+
+// Invocation URI for the deployed Operator Multi-Site Assigner function.
+const SITE_ASSIGNER_URI = "https://api.glia.com/integrations/925a8001-9d41-4b67-b08d-ba3fff4026d7/endpoint";
 
 document.addEventListener("DOMContentLoaded", function () {
     confirmBox.addEventListener("change", function () {
@@ -60,12 +63,34 @@ function extractEmails(text) {
     return (text.match(emailRegex) || []).map(email => email.toLowerCase().trim());
 }
 
-function baseUrlValue() {
-    return document.getElementById("base-url").value.replace(/\/$/, "") || "https://api.glia.com";
+// Base URL and the token the operator typed. The function uses these.
+function collectAuth() {
+    return {
+        baseUrl: document.getElementById("base-url").value.replace(/\/$/, "") || "https://api.glia.com",
+        apiToken: document.getElementById("api-token").value.trim(),
+        accessToken: document.getElementById("bearer-token").value.trim()
+    };
 }
 
-function bearerValue() {
-    return document.getElementById("bearer-token").value.trim();
+// Ask the function to exchange the API token. The bearer comes back into the password field.
+async function fetchBearerViaApiToken() {
+    const apiToken = document.getElementById("api-token").value.trim();
+    if (!apiToken) {
+        logOutput("No API token. Paste a bearer token instead.", true);
+        setStatus("Ready");
+        return;
+    }
+    setStatus("Requesting bearer");
+    logOutput("Requesting a bearer.", true);
+    try {
+        const result = await callFunction({ action: "token", baseUrl: collectAuth().baseUrl, apiToken: apiToken });
+        document.getElementById("bearer-token").value = result.token || "";
+        logOutput("Bearer ready: " + String(result.token || "").substring(0, 5) + "...");
+        setStatus("Bearer ready");
+    } catch (error) {
+        logOutput("Bearer request failed: " + error.message);
+        setStatus("Bearer failed");
+    }
 }
 
 // "id-one, id-two" becomes a unique list. Blank pieces and repeats are dropped.
@@ -83,35 +108,31 @@ function siteIdsValue() {
     return ids;
 }
 
-// Exchange the optional API token for a bearer. Skip this when a bearer is already pasted.
-async function fetchBearerViaApiToken() {
-    const apiToken = document.getElementById("api-token").value.trim();
-    if (!apiToken) {
-        logOutput("No API token. Paste a bearer token instead.", true);
-        setStatus("Ready");
-        return;
+// One call to the deployed Glia Function. The page does not call the operators API itself.
+async function callFunction(payload) {
+    if (!SITE_ASSIGNER_URI) {
+        throw new Error("The Operator Multi-Site Assigner invocation URI is not set yet.");
     }
-    setStatus("Requesting bearer");
-    logOutput("Requesting a bearer from operator_authentication/tokens.", true);
-    try {
-        const response = await fetch(baseUrlValue() + "/operator_authentication/tokens?api_token=" + encodeURIComponent(apiToken), {
-            method: "POST",
-            headers: {
-                "Accept": "application/vnd.salemove.v1+json",
-                "Content-Type": "application/json"
-            }
-        });
-        const data = await readJson(response);
-        if (!response.ok || !data.token) {
-            throw new Error(safeError(apiError(response, data, "No token in the response."), apiToken));
-        }
-        document.getElementById("bearer-token").value = data.token;
-        logOutput("Bearer ready: " + data.token.substring(0, 5) + "...");
-        setStatus("Bearer ready");
-    } catch (error) {
-        logOutput("Bearer request failed: " + safeError(error.message, apiToken));
-        setStatus("Bearer failed");
+    const glia = await window.getGliaApi({ version: "v1" });
+    const headers = await glia.getRequestHeaders();
+    headers["Content-Type"] = "application/json";
+    const response = await fetch(SITE_ASSIGNER_URI, {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify(payload)
+    });
+    const data = await response.json().catch(function () {
+        return {};
+    });
+    const body = data && data.payload && typeof data.payload === "object" ? data.payload : data;
+    if (!response.ok || body.success === false) {
+        const error = new Error(body.error || "The site assigner function failed.");
+        error.logs = body.logs || [];
+        error.summary = body.summary || [];
+        error.rows = body.rows || [];
+        throw error;
     }
+    return body;
 }
 
 // Show the unique emails before any operator is changed.
@@ -158,9 +179,8 @@ async function runAssignment() {
     const startedAt = Date.now();
     const siteIds = siteIdsValue();
     const siteList = siteIds.join(", ");
-    const bearer = bearerValue();
-    const summary = [];
-    const rows = [];
+    let summary = [];
+    let rows = [];
     const runId = ++runSerial;
     finalReport = "";
     sealedReport = "";
@@ -174,7 +194,8 @@ async function runAssignment() {
     setStatus("Running");
 
     try {
-        if (!bearer) {
+        const auth = collectAuth();
+        if (!auth.accessToken && !auth.apiToken) {
             throw new Error("Paste a bearer token, or use Get bearer with an API token.");
         }
         if (!siteIds.length) {
@@ -183,31 +204,21 @@ async function runAssignment() {
         if (!parsedEmails.length) {
             throw new Error("Parse the operator list before assigning.");
         }
-        logOutput("Bearer in use: " + bearer.substring(0, 5) + "...");
+        if (auth.accessToken) {
+            logOutput("Bearer in use: " + auth.accessToken.substring(0, 5) + "...");
+        }
         logOutput("Sites to add: " + siteList);
         logOutput("Operators: " + parsedEmails.length);
-
-        for (let i = 0; i < parsedEmails.length; i++) {
-            if (runId !== runSerial) {
-                throw new Error("Run stopped.");
-            }
-            const email = parsedEmails[i];
-            logOutput("[" + (i + 1) + "/" + parsedEmails.length + "] " + email);
-            const row = await assignOne(email, siteIds, bearer);
-            if (runId !== runSerial) {
-                throw new Error("Run stopped.");
-            }
-            rows.push(row);
-            summary.push({
-                item: email,
-                action: row.status === "success" ? "Add sites " + siteList : "Add sites",
-                status: row.status === "success" ? "Success" : "Failed"
-            });
-            logOutput("   -> " + (row.status === "success" ? "Updated " + row.operatorId : row.error));
-            renderResults(rows, siteIds);
-            // A short pause between operators, same as the original tool.
-            await sleep(250);
+        const result = await callFunction(Object.assign(auth, { emails: parsedEmails, siteIds: siteIds }));
+        if (runId !== runSerial) {
+            throw new Error("Run stopped.");
         }
+        rows = result.rows || [];
+        summary = result.summary || [];
+        (result.logs || []).forEach(function (line) {
+            logOutput(line);
+        });
+        renderResults(rows, siteIds);
 
         renderSummaryTable(summary);
         logOutput("BATCH JOB FINISHED");
@@ -215,7 +226,7 @@ async function runAssignment() {
             action: "Assign operators to sites " + siteList,
             status: batchStatus(summary),
             finalReport: executionReport(summary),
-            url: baseUrlValue() + "/operators",
+            url: SITE_ASSIGNER_URI || "https://api.glia.com/operators",
             durationMs: Date.now() - startedAt
         });
         triggerButton.textContent = "Completed";
@@ -223,6 +234,16 @@ async function runAssignment() {
     } catch (error) {
         const cancelled = runId !== runSerial;
         if (!cancelled) {
+            (error.logs || []).forEach(function (line) {
+                logOutput(line);
+            });
+            if (error.rows && error.rows.length) {
+                rows = error.rows;
+                renderResults(rows, siteIds);
+            }
+            if (error.summary && error.summary.length) {
+                summary = error.summary;
+            }
             logOutput("CRITICAL ERROR: " + error.message);
             if (summary.length) {
                 renderSummaryTable(summary);
@@ -235,62 +256,13 @@ async function runAssignment() {
             action: "Assign operators to sites " + (siteList || "(missing site)"),
             status: "Failed",
             finalReport: executionReport(summary) || error.message,
-            url: baseUrlValue() + "/operators",
+            url: SITE_ASSIGNER_URI || "https://api.glia.com/operators",
             durationMs: Date.now() - startedAt
         });
     } finally {
         runActive = false;
         stayNote.classList.add("hidden");
     }
-}
-
-// GET /operators?contains=email, then PATCH that operator with the merged site list.
-async function assignOne(email, siteIds, bearer) {
-    const headers = {
-        "Accept": "application/vnd.salemove.v1+json",
-        "Authorization": "Bearer " + bearer,
-        "Content-Type": "application/json"
-    };
-    const search = await gliaFetch(baseUrlValue() + "/operators?contains=" + encodeURIComponent(email), {
-        method: "GET",
-        headers: headers
-    });
-    if (!search.response.ok) {
-        return { email: email, status: "error", error: apiError(search.response, search.data, "Search failed."), operatorId: "", sitesBefore: [], sitesAfter: [] };
-    }
-    const operators = search.data.operators || [];
-    const operator = operators.find(function (item) {
-        return item.email && item.email.toLowerCase() === email;
-    });
-    if (!operator) {
-        return { email: email, status: "error", error: "No operator found with email " + email + ".", operatorId: "", sitesBefore: [], sitesAfter: [] };
-    }
-    const sitesBefore = (operator.assignments || []).map(function (assignment) {
-        return assignment.site_id;
-    }).filter(Boolean);
-    const merged = [];
-    // Keep every current site, then append each new id once.
-    sitesBefore.concat(siteIds).forEach(function (id) {
-        if (merged.indexOf(id) === -1) {
-            merged.push(id);
-        }
-    });
-    const patched = await gliaFetch(baseUrlValue() + "/operators/" + encodeURIComponent(operator.id), {
-        method: "PATCH",
-        headers: headers,
-        body: JSON.stringify({
-            assignments: merged.map(function (id) {
-                return { site_id: id };
-            })
-        })
-    });
-    if (!patched.response.ok) {
-        return { email: email, status: "error", error: apiError(patched.response, patched.data, "Update failed."), operatorId: operator.id, sitesBefore: sitesBefore, sitesAfter: [] };
-    }
-    const sitesAfter = (patched.data.assignments || []).map(function (assignment) {
-        return assignment.site_id;
-    });
-    return { email: email, status: "success", error: "", operatorId: operator.id, sitesBefore: sitesBefore, sitesAfter: sitesAfter };
 }
 
 function renderResults(rows, siteIds) {
@@ -489,46 +461,6 @@ function resetSession() {
     outputConsole.textContent = "Paste operators, then assign the site.";
     setStatus("Ready");
     closeReset();
-}
-
-async function gliaFetch(url, options) {
-    const response = await fetch(url, options);
-    const data = await readJson(response);
-    return { response: response, data: data };
-}
-
-async function readJson(response) {
-    const text = await response.text();
-    if (!text) {
-        return {};
-    }
-    try {
-        return JSON.parse(text);
-    } catch (error) {
-        return { message: text.slice(0, 180) };
-    }
-}
-
-function apiError(response, data, fallback) {
-    const detail = data.message || data.error || data.error_message || fallback;
-    return response.status + " " + detail;
-}
-
-// Keep a rejected token out of the console if Glia echoes it back.
-function safeError(text, secret) {
-    if (!text) {
-        return "";
-    }
-    if (secret && text.indexOf(secret) !== -1) {
-        return text.split(secret).join("(hidden)");
-    }
-    return text.slice(0, 300);
-}
-
-function sleep(ms) {
-    return new Promise(function (resolve) {
-        setTimeout(resolve, ms);
-    });
 }
 
 function buildTable(headers, rows) {
