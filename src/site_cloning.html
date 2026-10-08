@@ -35,22 +35,22 @@
             <form id="cloning-form">
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="site-id">Site ID</label>
+                        <label for="site-id">Site ID*</label>
                         <input type="text" id="site-id" placeholder="1234-abc-5678-xyz" required>
                     </div>
 
                     <div class="form-group">
-                        <label for="site-name">Site Name</label>
+                        <label for="site-name">Site Name*</label>
                         <input type="text" id="site-name" placeholder="FI Production" required>
                     </div>
 
                     <div class="form-group">
-                        <label for="site-address">Site Address</label>
+                        <label for="site-address">Site Address*</label>
                         <input type="text" id="site-address" placeholder="cloningdummy.com" required>
                     </div>
 
                     <div class="form-group">
-                        <label form="bearer-token">Bearer Token</label>
+                        <label for="bearer-token">Bearer Token*</label>
                         <input type="password" id="bearer-token" placeholder="token" required>
                     </div>
 
@@ -62,6 +62,7 @@
                 <div>
                     <button type="submit" class="btn btn-primary" id="run-cloning">Run Cloning</button>
                 </div>
+                <div id="error"></div>
             </form>
         </section>
 

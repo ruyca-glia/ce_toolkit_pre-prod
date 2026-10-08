@@ -1,4 +1,5 @@
-const functionURL = 'https://api.glia.com/integrations/d64fa03f-e3d1-4b83-9740-da3b2f07a005/endpoint';
+const INVOCATION_URI = 'https://api.glia.com/integrations/d64fa03f-e3d1-4b83-9740-da3b2f07a005/endpoint';
+const WRITE_LOG_URI = 'https://api.glia.com/integrations/f026a5b6-ba81-4211-99e1-3667bbaf16e9/endpoint';
 var gliaApi = null;
 
 window.getGliaApi({ version: 'v1' }).then(function (glia) {
@@ -8,7 +9,6 @@ window.getGliaApi({ version: 'v1' }).then(function (glia) {
     document.getElementById('error').style.display = 'block';
 });
 
-// TODO add error logic if inputs are missing 
 async function clone() {
     // Gather input
     const siteId = document.getElementById('site-id').value.trim();
@@ -17,16 +17,18 @@ async function clone() {
     const bearerToken = document.getElementById('bearer-token').value.trim();
     const baseURL = document.getElementById('base-url').value.trim();
 
-    if (!gliaApi) {
-        return;
-    }t
+    // console.log("siteId" + siteId);
+    // console.log("siteName" + siteName);
+    // console.log("address" + address);
+    // console.log("baseURL" + baseURL);
 
     try {
-        var headers = await gliaApi.getRequestHeaders();
+        const glia = await window.getGliaApi({ version: 'v1' });
+        var headers = await glia.getRequestHeaders();
         headers['Content-Type'] = 'application/json';
         headers['Authorization'] = bearerToken;
 
-        var res = await fetch(functionURL, {
+        var res = await fetch(INVOCATION_URI, {
             method: 'POST',
             headers: headers,
             body: JSON.stringify({
@@ -40,16 +42,45 @@ async function clone() {
         if (!res.ok) throw new Error('HTTP ' + res.status);
 
     } catch (err) {
+        console.log("Error: " + err.message);
     }
+}
 
+async function writeAuditLog({ action, status, finalReport = '' }) {
+    try {
+        const glia = await window.getGliaApi({ version: 'v1' });
+        const headers = await glia.getRequestHeaders();
+        headers['Content-Type'] = 'application/json';
+
+        const user = await glia.getUser().catch(() => null);
+
+        const res = await fetch(WRITE_LOG_URI, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                // siteId: 'a5c110f6-a4a5-47d9-bbf1-d03d7a5e5089',
+                siteId: 'a5c110f6-a4a5-47d9-bbf1-d03d7a5e5089', // CE toolkit testing
+                userId: user?.email ?? 'support@glia.com',
+                action,
+                automation: 'Site Cloning',
+                status,
+                url: INVOCATION_URI,
+                finalReport
+            })
+        });
+
+        const result = await res.json();
+        if (!result.success) console.error('Audit log failed:', result.error);
+
+    } catch (err) {
+        console.error('Could not reach the audit log function', err);
+    }
 }
 
 // Trigger on "Run Cloning" clicked
-document.getElementById('run-query').addEventListener('click', function () {
+document.getElementById('cloning-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    writeAuditLog();
+    console.log("clicked");
     clone();
 });
-
-// Gets the logged in operator
-// const glia = await window.getGliaApi({ version: 'v1' });
-// const user = await glia.getUser();   // { name, email, … }
-// const userEmail = user?.email ?? 'support@glia.com';   // always keep a fallback
