@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CE Toolkit — Bulk Import</title>
+    <link rel="stylesheet" href="./css/style.css">
+    <link rel="stylesheet" href="./css/automations.css">
+    <link rel="stylesheet" href="./css/tool-page.css">
+    <script async src="https://api.glia.com/salemove_integration.js"></script>
+    <script type="text/javascript" src="//libs.glia.com/axon.js"></script>
+    <script src="./js/bulk-import.js" defer></script>
+</head>
+
+<body>
+    <header class="header">
+        <div class="header-content">
+            <a href="../index.html" class="back-link">← Back to Dashboard</a>
+            <button class="btn btn-secondary btn-small" id="reset-session" type="button">Reset session</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="tool-header">
+            <div class="tool-icon-large">👥</div>
+            <div>
+                <h1>Bulk Import</h1>
+                <p>Create operators from a name and email list. Existing operators are not changed.</p>
+            </div>
+        </div>
+
+        <section class="panel">
+            <h2>1 · Authenticate</h2>
+            <p class="form-hint" style="margin-bottom: 1rem;">Paste a bearer token, or leave that blank and exchange an API token for one. Neither value is saved after you leave or reset.</p>
+
+            <div class="form-group">
+                <label for="base-url">Base URL</label>
+                <input id="base-url" type="text" value="https://api.glia.com">
+                <span class="form-hint">Use https://api.glia.eu for Europe.</span>
+            </div>
+
+            <div class="form-group">
+                <label for="api-token">API token (optional)</label>
+                <input id="api-token" type="password" placeholder="Skip this if you already have a bearer" autocomplete="off" spellcheck="false">
+            </div>
+            <button class="btn btn-secondary" id="get-bearer" type="button">Get bearer</button>
+
+            <div class="form-group" style="margin-top: 1.25rem;">
+                <label for="bearer-token">Bearer token</label>
+                <input id="bearer-token" type="password" placeholder="Paste a bearer, or fill this with Get bearer" autocomplete="off" spellcheck="false">
+                <span class="form-hint">Hidden like a password. You can skip the API token and type a bearer here.</span>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>2 · Operator settings</h2>
+            <div class="form-group">
+                <label for="site-id">Site ID</label>
+                <input id="site-id" type="text" placeholder="Site the new operators are assigned to">
+            </div>
+            <div class="form-group">
+                <label for="role">Role</label>
+                <select id="role">
+                    <option value="super_manager" selected>super_manager</option>
+                    <option value="manager">manager</option>
+                    <option value="operator">operator</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="temp-password">Temp password</label>
+                <input id="temp-password" type="password" value="+qVNXsz6c2YLuu83/slHqluQEtDsd31Y931HIgHdkC8=" autocomplete="off" spellcheck="false">
+                <span class="form-hint">Filled with the current temp password. Hidden like a password. Reset puts that value back.</span>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>3 · Operators</h2>
+            <div class="form-group">
+                <label for="user-list">Name and email list</label>
+                <textarea id="user-list" rows="8" placeholder="Format 1 — alternating lines:&#10;Lacy Jones&#10;ljones@clearmountain.bank&#10;&#10;Format 2 — inline dash:&#10;Lacy Jones - ljones@clearmountain.bank"></textarea>
+            </div>
+            <button class="btn btn-secondary" id="parse-list" type="button">Parse and preview</button>
+            <div id="preview" style="margin-top: 1rem;"></div>
+        </section>
+
+        <section class="panel">
+            <div class="form-group">
+                <label class="checkbox-option" for="confirm-run">
+                    <input id="confirm-run" type="checkbox">
+                    Everything looks correct. Proceed.
+                </label>
+            </div>
+            <button class="btn btn-primary" id="trigger-run" type="button" disabled>Create operators</button>
+            <p id="stay-note" class="form-hint hidden" style="margin-top: 1rem;">Stay on this page until every operator has been created.</p>
+        </section>
+
+        <section class="panel">
+            <h2>Results</h2>
+            <div id="result-table"></div>
+        </section>
+
+        <section class="panel">
+            <h2>Output</h2>
+            <div class="output-container">
+                <div class="output-header">
+                    <span class="output-status" id="output-status">Ready</span>
+                    <button class="btn btn-small" id="clear-output" type="button">Clear</button>
+                </div>
+                <pre class="output-console" id="output">Paste a name and email list, then create the operators.</pre>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>Internal Tools v1.0 · For authorized team members only</p>
+    </footer>
+</body>
+
+</html>
