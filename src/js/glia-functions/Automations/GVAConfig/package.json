@@ -1,0 +1,11 @@
+{
+  "scripts": {
+    "build": "./node_modules/esbuild/bin/esbuild  --bundle --format=esm --outfile=function-out.js --target=es2020 jira-ce-tkt-retrieval-gva-config.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  },
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.1148.0"
+  }
+}
