@@ -17,6 +17,12 @@ src/js/glia-functions/Jira/package-lock.json
 .vscode/
 
 
+# Dependencies and local secrets. Never commit these.
+node_modules/
+.env
+.env.*
+*.log
+
 # DS store
 *.DS_Store
 src/js/glia-functions/.DS_Store
