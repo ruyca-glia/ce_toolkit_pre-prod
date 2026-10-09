@@ -80,15 +80,14 @@ async function fetchBearerViaApiToken() {
         setStatus("Ready");
         return;
     }
-    setStatus("Requesting bearer");
-    logOutput("Requesting a bearer.", true);
+    const endWait = beginWait("get-bearer", "Getting bearer");
     try {
         const result = await callFunction({ action: "token", baseUrl: collectAuth().baseUrl, apiToken: apiToken });
         document.getElementById("bearer-token").value = result.token || "";
-        logOutput("Bearer ready: " + String(result.token || "").substring(0, 5) + "...");
+        endWait("Bearer ready: " + String(result.token || "").substring(0, 5) + "...");
         setStatus("Bearer ready");
     } catch (error) {
-        logOutput("Bearer request failed: " + error.message);
+        endWait("Bearer request failed: " + error.message);
         setStatus("Bearer failed");
     }
 }
@@ -108,12 +107,24 @@ function siteIdsValue() {
     return ids;
 }
 
+// Reuse the Glia bridge after the first lookup. A new lookup on every click adds wait.
+let gliaApiPromise = null;
+function gliaApi() {
+    if (!gliaApiPromise) {
+        gliaApiPromise = window.getGliaApi({ version: "v1" }).catch(function (error) {
+            gliaApiPromise = null;
+            throw error;
+        });
+    }
+    return gliaApiPromise;
+}
+
 // One call to the deployed Glia Function. The page does not call the operators API itself.
 async function callFunction(payload) {
     if (!SITE_ASSIGNER_URI) {
         throw new Error("The Operator Multi-Site Assigner invocation URI is not set yet.");
     }
-    const glia = await window.getGliaApi({ version: "v1" });
+    const glia = await gliaApi();
     const headers = await glia.getRequestHeaders();
     headers["Content-Type"] = "application/json";
     const response = await fetch(SITE_ASSIGNER_URI, {
@@ -521,4 +532,34 @@ function logOutput(message, clear) {
 
 function setStatus(text) {
     outputStatus.textContent = text;
+}
+
+// The button and the console tick each second until the function answers.
+function beginWait(buttonId, label) {
+    const button = document.getElementById(buttonId);
+    const original = button.textContent;
+    button.disabled = true;
+    let seconds = 0;
+    logOutput(label + "...", true);
+    const line = outputConsole.lastChild;
+    setStatus(label);
+    const timer = setInterval(function () {
+        seconds += 1;
+        const text = label + "... " + seconds + "s";
+        if (line) {
+            line.textContent = text + "\n";
+        }
+        button.textContent = text;
+        setStatus(text);
+    }, 1000);
+    return function endWait(finalLine) {
+        clearInterval(timer);
+        button.disabled = false;
+        button.textContent = original;
+        if (finalLine && line) {
+            line.textContent = finalLine + "\n";
+            finalReport += finalLine + "\n";
+            sealedReport = finalReport;
+        }
+    };
 }
