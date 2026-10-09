@@ -1,8 +1,9 @@
 // Functions Deploy page.
 // The operator picks "make a new one" or "update an existing one".
-// This page sends the form, including the typed API key or bearer, to the
-// Functions Deploy Glia Function. That function exchanges the key, creates
-// the version, polls the job, and sets the finished version as current.
+// This page sends the form to the Functions Deploy Glia Function.
+// Create and update only start the version job. This page then polls every
+// 10 seconds and deploys when a poll returns a version id. The 10 second
+// wait stays here. A function run cannot sleep that long.
 
 const outputConsole = document.getElementById("output");
 const outputStatus = document.getElementById("output-status");
@@ -39,6 +40,14 @@ const AUTOMATION_NAME = "Functions Deploy";
 
 // Invocation URI for the deployed Functions Deploy function.
 const FUNCTIONS_DEPLOY_URI = "https://api.glia.com/integrations/456c63b0-61b9-4171-8f7c-73b24a7dd4fa/endpoint";
+// The page waits this long between poll calls. The function itself does not sleep.
+const POLL_MS = 10000;
+// About 5 minutes of checks. The build can keep going after the page stops.
+const POLL_LIMIT = 30;
+// A few failed checks in a row are ignored. The next one past this stops the page.
+const POLL_ERRORS_OK = 3;
+// Survives a refresh so the page can poll the same task instead of starting another.
+const PENDING_KEY = "functions-deploy-pending";
 
 const MAX_CODE_BYTES = 512000;
 
@@ -76,6 +85,7 @@ document.addEventListener("DOMContentLoaded", () => {
     resetButton.addEventListener("click", openReset);
     resetYes.addEventListener("click", advanceReset);
     document.getElementById("reset-no").addEventListener("click", closeReset);
+    offerResume();
 });
 
 // Swap the choice screen for the form that matches the choice.
@@ -138,6 +148,7 @@ function resetSession() {
     outputConsole.textContent = "Choose make or update to begin.";
     outputStatus.textContent = "Ready";
     clearDeployStatus();
+    clearPending();
     document.getElementById("page-lead").textContent = "Create a new Glia Function, or update one that already exists.";
     workspace.classList.add("hidden");
     choiceScreen.classList.remove("hidden");
@@ -155,13 +166,15 @@ async function callFunction(action, payload) {
     const response = await fetch(FUNCTIONS_DEPLOY_URI, {
         method: "POST",
         headers: headers,
-        body: JSON.stringify(Object.assign({ action: action }, payload || {}))
+        body: JSON.stringify(Object.assign({ action: action }, collectAuth(), payload || {}))
     });
     const data = await readJson(response);
     const body = data && data.payload && typeof data.payload === "object" ? data.payload : data;
+    (body.logs || []).forEach(function (line) {
+        logOutput(line);
+    });
     if (!response.ok || body.success === false) {
         const error = new Error(body.error || "The Functions Deploy function failed.");
-        error.logs = body.logs || [];
         error.summary = body.summary || [];
         throw error;
     }
@@ -370,20 +383,54 @@ async function handleTriggerClick() {
     setStatus("Running");
 
     try {
-        validateMode();
-        document.getElementById("deploy-stay").textContent = stayBase() + " The Glia Function is creating the version and setting it current. Stay on this page.";
-        const result = await callFunction(mode, collectPayload());
-        (result.logs || []).forEach(function (line) {
-            logOutput(line);
+        const pending = readPending();
+        const resuming = pending && pending.taskSelf && pending.mode === mode;
+        let functionId = "";
+        let taskSelf = "";
+        if (resuming) {
+            logOutput("Resuming the version job. Task: " + pending.taskSelf);
+            functionId = pending.functionId || "";
+            taskSelf = pending.taskSelf;
+            invocationUri = pending.invocationUri || "";
+        } else {
+            validateMode();
+            logOutput(mode === "create"
+                ? "[1/3] Create function and start the version job"
+                : "[1/3] Start a new version from the base version");
+            const started = await callFunction(mode, collectPayload());
+            (started.summary || []).forEach(function (row) {
+                batchSummary.push(row);
+            });
+            functionId = started.functionId || "";
+            taskSelf = started.taskSelf || "";
+            invocationUri = started.invocationUri || "";
+            if (!taskSelf) {
+                throw new Error("The function did not return a task to poll.");
+            }
+            savePending({
+                mode: mode,
+                functionId: functionId,
+                taskSelf: taskSelf,
+                invocationUri: invocationUri
+            });
+        }
+
+        logOutput("[2/3] Wait for the version job");
+        const versionId = await waitForVersion(taskSelf);
+        functionId = (readPending() || {}).functionId || functionId;
+        batchSummary.push({ item: versionId, action: "Version ready", status: "Success" });
+
+        logOutput(mode === "create" ? "[3/3] Set version 1 as the current version" : "[3/3] Set current version");
+        const deployed = await callFunction("deploy", {
+            functionId: functionId,
+            versionId: versionId
         });
-        (result.summary || []).forEach(function (row) {
+        noteVersionCurrent(versionId);
+        (deployed.summary || []).forEach(function (row) {
             batchSummary.push(row);
         });
-        invocationUri = result.invocationUri || "";
-        if (result.versionId) {
-            noteVersionDiscovered(result.versionId);
-            noteVersionCurrent(result.versionId);
-        }
+        invocationUri = deployed.invocationUri || invocationUri;
+        clearPending();
         logOutput("BATCH JOB FINISHED");
         if (invocationUri) {
             logOutput("Invocation URI: " + invocationUri);
@@ -404,29 +451,107 @@ async function handleTriggerClick() {
             disarmStayWarning();
             document.getElementById("deploy-status-title").textContent = "Deploy stopped";
             document.getElementById("deploy-stay").textContent = "The deploy stopped before the version was current. You can leave this page.";
-            (error.logs || []).forEach(function (line) {
-                logOutput(line);
-            });
             (error.summary || []).forEach(function (row) {
                 batchSummary.push(row);
             });
+            if (error.message.indexOf("Still building") === 0) {
+                document.getElementById("deploy-status-title").textContent = "Still building";
+                document.getElementById("deploy-stay").textContent = "The page stopped after about 5 minutes. The build keeps running. Paste the bearer and run again to finish from the saved task.";
+            }
             logOutput("CRITICAL ERROR: " + error.message);
             if (batchSummary.length) {
                 renderSummaryTable(batchSummary);
             }
             triggerButton.textContent = "Retry";
             triggerButton.disabled = !confirmBox.checked;
-            setStatus("Failed");
+            setStatus(error.message.indexOf("Still building") === 0 ? "Partial Failure" : "Failed");
         }
         // Success and failure each write one row, including a run stopped by Reset.
         await writeAuditLog({
             action: auditAction(),
-            status: "Failed",
+            status: error.message.indexOf("Still building") === 0 ? "Partial Failure" : "Failed",
             finalReport: executionReport(batchSummary) || "Run stopped before it finished.",
             url: auditUrl(invocationUri),
             durationMs: Date.now() - startedAt
         });
     }
+}
+
+// Ask the function to read the task once, then wait 10 seconds before the next ask.
+async function waitForVersion(taskSelf) {
+    let errors = 0;
+    for (let check = 1; check <= POLL_LIMIT; check++) {
+        for (let left = POLL_MS / 1000; left > 0; left--) {
+            if (!runActive) {
+                throw new Error("Deploy stopped before the version was current.");
+            }
+            setStayCountdown("Check " + check + " of " + POLL_LIMIT + " in " + left + "s.");
+            await sleep(1000);
+        }
+        try {
+            const polled = await callFunction("poll", { taskSelf: taskSelf });
+            errors = 0;
+            if (polled.functionId) {
+                const pending = readPending() || {};
+                pending.functionId = polled.functionId;
+                pending.taskSelf = taskSelf;
+                pending.mode = pending.mode || mode;
+                savePending(pending);
+            }
+            if (polled.status === "completed" && polled.versionId) {
+                noteVersionDiscovered(polled.versionId);
+                return polled.versionId;
+            }
+        } catch (error) {
+            if (error.message.indexOf("Version creation failed") !== -1 || ++errors > POLL_ERRORS_OK) {
+                throw error;
+            }
+            logOutput("   -> Check " + check + " failed, trying again: " + error.message);
+        }
+    }
+    throw new Error("Still building after about 5 minutes. The job keeps running. Task: " + taskSelf);
+}
+
+function savePending(job) {
+    sessionStorage.setItem(PENDING_KEY, JSON.stringify(job));
+}
+
+function readPending() {
+    try {
+        const raw = sessionStorage.getItem(PENDING_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch (error) {
+        return null;
+    }
+}
+
+function clearPending() {
+    sessionStorage.removeItem(PENDING_KEY);
+}
+
+// A refresh keeps the task. Polling starts again once the bearer is on the page.
+function offerResume() {
+    const pending = readPending();
+    if (!pending || !pending.taskSelf) {
+        return;
+    }
+    chooseMode(pending.mode === "update" ? "update" : "create");
+    logOutput("A version job is still building. Task: " + pending.taskSelf);
+    if (!tokenField.value.trim()) {
+        logOutput("Paste the bearer, check the box, and run again. This continues that task instead of starting a new one.");
+        return;
+    }
+    logOutput("Bearer is still filled in. Run again to keep polling that task.");
+}
+
+function setStayCountdown(extra) {
+    document.getElementById("deploy-stay").textContent = stayBase() + " " + extra;
+}
+
+function sleep(ms) {
+    return new Promise(function (resolve) {
+        setTimeout(resolve, ms);
+    });
 }
 
 // Required fields for the mode that is on screen. Throws before any Glia call.
