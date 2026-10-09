@@ -35,7 +35,9 @@ confirmBox.addEventListener("change", function () {
 document.getElementById("get-bearer").addEventListener("click", getBearer);
 document.getElementById("load-operators").addEventListener("click", loadOperators);
 document.getElementById("trigger-run").addEventListener("click", disableSelected);
-document.getElementById("reset-session").addEventListener("click", resetSession);
+document.getElementById("reset-session").addEventListener("click", openReset);
+document.getElementById("reset-yes").addEventListener("click", resetSession);
+document.getElementById("reset-no").addEventListener("click", closeReset);
 document.getElementById("select-enabled").addEventListener("click", function () {
     setGroupChecked("enabled-operators", true);
 });
@@ -257,6 +259,7 @@ function renderOperators(operators) {
     raw.textContent = operators.length
         ? JSON.stringify({ operators: operators, note: "Full list of operators fetched via pagination" }, null, 2)
         : "Response will appear here...";
+    refreshSelectionNote();
 }
 
 function copyRaw() {
@@ -297,6 +300,7 @@ function operatorCard(operator, protectedGroup) {
     checkbox.dataset.operatorId = operator.id;
     checkbox.addEventListener("change", function () {
         card.classList.toggle("selected", checkbox.checked);
+        refreshSelectionNote();
     });
     const name = document.createElement("span");
     name.textContent = operator.name || "N/A";
@@ -319,6 +323,7 @@ function operatorCard(operator, protectedGroup) {
         }
         checkbox.checked = !checkbox.checked;
         card.classList.toggle("selected", checkbox.checked);
+        refreshSelectionNote();
     });
     return card;
 }
@@ -328,6 +333,20 @@ function setGroupChecked(containerId, checked) {
         checkbox.checked = checked;
         checkbox.closest(".operator-card").classList.toggle("selected", checked);
     });
+    refreshSelectionNote();
+}
+
+// The applet sandbox blocks window.confirm, so the count and any protected
+// warning stay on the page. The checkbox is what enables Disable selected.
+function refreshSelectionNote() {
+    const note = document.getElementById("selection-note");
+    const chosen = selectedOperators();
+    if (!chosen.length) {
+        note.textContent = "Select operators, then check the box to enable Disable selected.";
+        return;
+    }
+    const protectedCount = chosen.filter(isProtected).length;
+    note.textContent = chosen.length + " operator(s) selected." + (protectedCount ? " This includes " + protectedCount + " protected operator(s)." : "");
 }
 
 function selectedOperators() {
@@ -354,10 +373,6 @@ async function disableSelected() {
         return;
     }
     const protectedCount = chosen.filter(isProtected).length;
-    const warning = protectedCount ? " This includes " + protectedCount + " protected operator(s)." : "";
-    if (!window.confirm("Disable " + chosen.length + " operator(s)?" + warning)) {
-        return;
-    }
     const serial = ++runSerial;
     runActive = true;
     triggerButton.disabled = true;
@@ -369,7 +384,7 @@ async function disableSelected() {
     const summary = [];
     let succeeded = 0;
     let failed = 0;
-    logOutput("Starting to disable " + chosen.length + " operator(s).");
+    logOutput("Starting to disable " + chosen.length + " operator(s)." + (protectedCount ? " This includes " + protectedCount + " protected operator(s)." : ""));
     setStatus("Running");
     for (let index = 0; index < chosen.length; index += 1) {
         if (serial !== runSerial) {
@@ -491,10 +506,20 @@ async function writeAuditLog({ action, status, finalReport: report = "", url = "
     }
 }
 
+function openReset() {
+    const dialog = document.getElementById("reset-dialog");
+    dialog.classList.remove("hidden");
+    dialog.style.display = "flex";
+}
+
+function closeReset() {
+    const dialog = document.getElementById("reset-dialog");
+    dialog.classList.add("hidden");
+    dialog.style.display = "";
+}
+
 function resetSession() {
-    if (!window.confirm("Clear this instance? Tokens, the operator lists, and selections on this page will be removed.")) {
-        return;
-    }
+    closeReset();
     if (runActive) {
         runSerial += 1;
         runActive = false;
@@ -512,6 +537,7 @@ function resetSession() {
     listStatus.textContent = "";
     resultBox.innerHTML = "";
     renderOperators([]);
+    refreshSelectionNote();
     outputConsole.textContent = "Paste a bearer, or exchange an API token, then load operators.";
     setStatus("Ready");
 }
