@@ -152,7 +152,7 @@ async function getBearer() {
     try {
         const data = await callFunction("token");
         document.getElementById("bearer-token").value = data.token || "";
-        wait.finish("Bearer ready. The first 5 characters are " + String(data.token || "").slice(0, 5) + ".");
+        wait.finish("Bearer is ready. It stays in the password field and is not written here.");
         setStatus("Ready");
     } catch (error) {
         wait.finish("Bearer failed: " + error.message);
@@ -180,12 +180,16 @@ async function loadOperators() {
         logOutput("Paste a bearer, or fill the API token.");
         return;
     }
+    logOutput(creds.accessToken
+        ? "Using the pasted bearer. The token is not written here."
+        : "The API token will be exchanged inside the function. The token is not written here.");
     const includeDisabled = document.getElementById("include-disabled").value;
     const serial = ++runSerial;
     runActive = true;
     operatorsData = [];
     const wait = beginWait("load-operators", "Fetching operators...");
     const started = Date.now();
+    const pageNotes = [];
     try {
         let pageUrl = "";
         let pages = 0;
@@ -199,9 +203,11 @@ async function loadOperators() {
                 wait.finish("");
                 return;
             }
+            const pageCount = (data.operators || []).length;
             operatorsData = operatorsData.concat(data.operators || []);
             pageUrl = data.nextPage || "";
             pages += 1;
+            pageNotes.push((data.logs && data.logs[0]) || ("Page " + pages + " returned " + pageCount + " operator(s)."));
             listStatus.textContent = "Fetching operators... (" + operatorsData.length + " found so far)";
             if (serial !== runSerial) {
                 wait.finish("");
@@ -209,8 +215,9 @@ async function loadOperators() {
             }
         } while (pageUrl);
         renderOperators(operatorsData);
-        listStatus.textContent = operatorsData.length + " operators across " + pages + " page(s).";
-        wait.finish("Loaded " + operatorsData.length + " operators.");
+        const included = includeDisabled === "false" ? "Disabled operators were left out." : "Disabled operators were included.";
+        listStatus.textContent = "Loaded " + operatorsData.length + " operator(s) across " + pages + " page(s) for " + siteIds + ". " + included;
+        wait.finish(listStatus.textContent + "\n" + pageNotes.join("\n"));
         setStatus("Ready");
         await writeAuditLog({
             action: "List operators",
@@ -384,19 +391,24 @@ async function disableSelected() {
     const summary = [];
     let succeeded = 0;
     let failed = 0;
-    logOutput("Starting to disable " + chosen.length + " operator(s)." + (protectedCount ? " This includes " + protectedCount + " protected operator(s)." : ""));
+    logOutput(creds.accessToken
+        ? "Using the pasted bearer. The token is not written here."
+        : "The API token will be exchanged inside the function. The token is not written here.");
+    logOutput("Starting to disable " + chosen.length + " operator(s)." + (protectedCount ? " This includes " + protectedCount + " protected operator(s)." : "") + " Each one is removed with DELETE /operators/{id}.");
     setStatus("Running");
     for (let index = 0; index < chosen.length; index += 1) {
         if (serial !== runSerial) {
             return;
         }
         const operator = chosen[index];
+        const who = (operator.name || "Unnamed") + (operator.email ? " (" + operator.email + ")" : "") + ", role " + (operator.role || "unknown") + ", id " + operator.id;
         const label = (operator.name || operator.id) + " (" + operator.id + ")";
         try {
-            await callFunction("disable", { operatorId: operator.id });
+            const data = await callFunction("disable", { operatorId: operator.id });
             succeeded += 1;
             summary.push({ item: label, action: "Disable operator", status: "Disabled" });
-            logOutput("Disabled " + label);
+            logOutput("[" + (index + 1) + "/" + chosen.length + "] " + who);
+            logOutput("   -> " + ((data.logs && data.logs[0]) || "Disable request accepted."));
             const box = document.querySelector("input[data-operator-id='" + cssEscape(operator.id) + "']");
             if (box) {
                 box.checked = false;
@@ -405,7 +417,8 @@ async function disableSelected() {
         } catch (error) {
             failed += 1;
             summary.push({ item: label, action: "Disable operator", status: "Failed" });
-            logOutput("Failed " + label + ": " + error.message);
+            logOutput("[" + (index + 1) + "/" + chosen.length + "] " + who);
+            logOutput("   -> Could not disable that operator. " + error.message);
         }
         if (index < chosen.length - 1) {
             await sleep(DISABLE_PAUSE_MS);
