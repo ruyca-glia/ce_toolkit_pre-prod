@@ -12,6 +12,10 @@ const writeLogURL = 'https://api.glia.com/integrations/f026a5b6-ba81-4211-99e1-3
 // Orchestrator (step 3). While empty, "Trigger" runs as a dry run: no Lambda is invoked.
 const provisionGVAUrl = '';
 
+// Source of the flag / clone base rules in buildProvisioningParams(). Update the date when the rules are re-checked.
+const GUIDE_URL = 'https://glia.atlassian.net/wiki/spaces/ENG/pages/5436702721/GVA+Provisioning+Guide';
+const GUIDE_LAST_UPDATED = 'September 17, 2026';
+
 // Jira form ("GVA Setup Ticket New") question labels
 const LABELS = {
     botName: "New Bot Name",
@@ -221,13 +225,19 @@ function buildProvisioningParams(formData) {
 }
 
 function handleGoClick(index) {
+    const goButton = document.querySelectorAll('.go-button')[index];
+    // Clicking the button of the ticket that is already open just closes it.
+    const wasOpen = goButton.classList.contains('btn-active');
+    clearActivePanels();
+    if (wasOpen) return;
+    goButton.textContent = 'View Less';
+    goButton.classList.add('btn-active');
+
     const issue = latestIssues[index];
     const formData = issue.formData || {};
     const { params, lambdaName, errors } = buildProvisioningParams(formData);
-    clearActivePanels();
 
-    const allButtons = document.querySelectorAll('.go-button');
-    const ticketRow = allButtons[index].closest('tr');
+    const ticketRow = goButton.closest('tr');
     const collapsibleRow = document.createElement('tr');
     collapsibleRow.className = 'collapsible-row';
 
@@ -236,6 +246,8 @@ function handleGoClick(index) {
         const str = Array.isArray(value) ? value.join(", ") : value;
         return escapeHtml(str || "N/A");
     };
+    // The "Other (Please specify ...)" option is long; the Specific field holds the actual base.
+    const showBase = (label) => choiceStartsWithOther(formData[label]) ? "Other" : show(label);
     const paramsHtml = Object.entries(params)
         .map(([key, value]) => `<dt>${key}</dt><dd><code>${escapeHtml(String(value) || "—")}</code></dd>`)
         .join('');
@@ -258,9 +270,12 @@ function handleGoClick(index) {
                     <dt>Site ID</dt><dd>${show(LABELS.siteId)}</dd>
                     <dt>Environment</dt><dd>${show(LABELS.environment)}</dd>
                     <dt>Language</dt><dd>${show(LABELS.language)}</dd>
+                    <dt>Bot Category</dt><dd>${show(LABELS.botCategory)}</dd>
                     <dt>GVA Type</dt><dd>${show(LABELS.gvaType)}</dd>
-                    <dt>CMS base</dt><dd>${show(LABELS.cmsBase)}</dd>
-                    <dt>Atlas base</dt><dd>${show(LABELS.atlasBase)}</dd>
+                    <dt>CMS base</dt><dd>${showBase(LABELS.cmsBase)}</dd>
+                    <dt>Atlas base</dt><dd>${showBase(LABELS.atlasBase)}</dd>
+                    <dt>Domain</dt><dd>${show(LABELS.domain)}</dd>
+                    <dt>GVA Generation</dt><dd>${show(LABELS.gvaGeneration)}</dd>
                 </dl>
                 </section>
                 <section class="gva-section">
@@ -271,6 +286,13 @@ function handleGoClick(index) {
                     ${paramsHtml}
                 </dl>
                 </section>
+                <div class="gva-alert gva-alert-warning">
+                    The flags and clone bases above follow the
+                    <a href="${GUIDE_URL}" target="_blank" rel="noopener noreferrer">GVA Provisioning Guide</a>
+                    as last updated on ${GUIDE_LAST_UPDATED}. If the guide has been updated since then, a flag may be set
+                    incorrectly. As the Client Engineer, you are responsible for checking the parameters against the
+                    current guide before triggering.
+                </div>
                 ${errorsHtml}
                 <div class="approval-container">
                     <label><input type="checkbox" class="approval-checkbox" ${blocked} onclick="handleApprovalCheck(this)"> Everything looks correct. Proceed.</label>
@@ -385,6 +407,15 @@ function handleApprovalCheck(checkbox) {
 function clearActivePanels() {
     const existingPanel = document.querySelector('.collapsible-row');
     if (existingPanel) existingPanel.remove();
+    document.querySelectorAll('.go-button.btn-active').forEach(button => {
+        button.textContent = 'View More';
+        button.classList.remove('btn-active');
+    });
+}
+
+function choiceStartsWithOther(value) {
+    const first = Array.isArray(value) ? value[0] : value;
+    return typeof first === "string" && first.trim().startsWith("Other");
 }
 
 function logOutput(msg, clear = false) {
