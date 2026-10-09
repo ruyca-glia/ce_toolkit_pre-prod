@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CE Toolkit — Batch Disabler (Client Offboarding)</title>
+    <link rel="stylesheet" href="./css/style.css">
+    <link rel="stylesheet" href="./css/automations.css">
+    <link rel="stylesheet" href="./css/tool-page.css">
+    <script async src="https://api.glia.com/salemove_integration.js"></script>
+    <script type="text/javascript" src="//libs.glia.com/axon.js"></script>
+    <script src="./js/batch-disabler.js" defer></script>
+    <style>
+        .tool-header .offboard-note {
+            margin: 0.5rem 0 0;
+            color: #1d4ed8;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 6px;
+            padding: 0.45rem 0.7rem;
+            font-size: 0.875rem;
+        }
+
+        .operator-groups {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
+
+        @media (min-width: 960px) {
+            .operator-groups {
+                grid-template-columns: 1fr 1fr 1fr;
+            }
+        }
+
+        .operator-group h3 {
+            margin: 0 0 0.5rem;
+            font-size: 0.95rem;
+        }
+
+        .operator-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .operator-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            max-height: 28rem;
+            overflow: auto;
+        }
+
+        .operator-card {
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            padding: 0.7rem 0.8rem;
+            background: #fff;
+            cursor: pointer;
+        }
+
+        .operator-card.selected {
+            border-color: #93c5fd;
+            background: #eff6ff;
+        }
+
+        .operator-card.protected-card {
+            border-color: #f9a8d4;
+            background: #fdf2f8;
+        }
+
+        .operator-card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 600;
+        }
+
+        .operator-details {
+            margin-top: 0.4rem;
+            color: var(--gray-500);
+            font-size: 0.8125rem;
+        }
+
+        .protected-label {
+            margin-top: 0.35rem;
+            color: #be185d;
+            font-weight: 700;
+            font-size: 0.75rem;
+        }
+
+        .empty-note {
+            margin: 0;
+            color: var(--gray-500);
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <header class="header">
+            <div class="header-content">
+                <a href="../index.html" class="back-link">← Back to Toolkit</a>
+                <h1>CE Toolkit</h1>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="tool-header">
+                <h2>Batch Disabler (Client Offboarding)</h2>
+                <p>Load the operators on one or more sites, choose who to turn off, and disable them one at a time.</p>
+                <p class="offboard-note">NOTE: Protected operators (Support, Super Manager, names containing “glia”, and support+omniguide addresses) are listed on their own. They have no Select all. You can still tick one by hand.</p>
+            </div>
+
+            <section class="panel">
+                <h2>1 · Authentication</h2>
+                <div class="form-group">
+                    <label for="base-url">Base URL</label>
+                    <input id="base-url" type="text" value="https://api.glia.com">
+                </div>
+                <div class="form-group">
+                    <label for="api-token">API token (optional)</label>
+                    <input id="api-token" type="password" autocomplete="off">
+                    <span class="form-hint">Use this when you have an API token. Get bearer fills the field below. You can skip it and paste a bearer instead.</span>
+                </div>
+                <button class="btn btn-secondary" id="get-bearer" type="button">Get bearer</button>
+                <div class="form-group" style="margin-top: 1rem;">
+                    <label for="bearer-token">Bearer token</label>
+                    <input id="bearer-token" type="password" autocomplete="off">
+                </div>
+            </section>
+
+            <section class="panel">
+                <h2>2 · Sites</h2>
+                <div class="form-group">
+                    <label for="site-ids">Site IDs</label>
+                    <input id="site-ids" type="text" placeholder="site-one, site-two">
+                    <span class="form-hint">Separate site IDs with commas. Every page of operators is loaded.</span>
+                </div>
+                <div class="form-group">
+                    <label for="include-disabled">Include disabled operators</label>
+                    <select id="include-disabled">
+                        <option value="true" selected>Yes</option>
+                        <option value="false">No</option>
+                    </select>
+                </div>
+                <button class="btn btn-secondary" id="load-operators" type="button">Get operators</button>
+                <p id="list-status" class="form-hint" style="margin-top: 0.75rem;"></p>
+            </section>
+
+            <section class="panel" id="operators-panel">
+                <h2>3 · Operators <span id="total-count"></span></h2>
+                <div class="operator-groups">
+                    <div class="operator-group">
+                        <h3 id="enabled-heading">Enabled operators (0)</h3>
+                        <div class="operator-actions">
+                            <button class="btn btn-secondary" id="select-enabled" type="button">Select all</button>
+                            <button class="btn btn-secondary" id="deselect-enabled" type="button">Deselect all</button>
+                        </div>
+                        <div class="operator-list" id="enabled-operators"></div>
+                    </div>
+                    <div class="operator-group">
+                        <h3 id="disabled-heading">Disabled operators (0)</h3>
+                        <div class="operator-actions">
+                            <button class="btn btn-secondary" id="select-disabled" type="button">Select all</button>
+                            <button class="btn btn-secondary" id="deselect-disabled" type="button">Deselect all</button>
+                        </div>
+                        <div class="operator-list" id="disabled-operators"></div>
+                    </div>
+                    <div class="operator-group">
+                        <h3 id="protected-heading">Protected operators (0)</h3>
+                        <div class="operator-list" id="protected-operators"></div>
+                    </div>
+                </div>
+                <div class="output-container" style="margin-top: 1rem;">
+                    <div class="output-header">
+                        <span class="output-label">Operator response</span>
+                        <button class="btn btn-secondary" id="copy-raw" type="button">Copy</button>
+                    </div>
+                    <pre class="output-console" id="operators-raw">Response will appear here...</pre>
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="form-group">
+                    <label class="checkbox-option" for="confirm-run">
+                        <input id="confirm-run" type="checkbox">
+                        Everything looks correct. Proceed.
+                    </label>
+                </div>
+                <button class="btn btn-primary" id="trigger-run" type="button" disabled>Disable selected</button>
+                <button class="btn btn-secondary" id="reset-session" type="button">Clear instance</button>
+                <p id="stay-note" class="form-hint hidden" style="margin-top: 1rem;">Stay on this page until every selected operator has been processed.</p>
+            </section>
+
+            <section class="panel">
+                <h2>Summary</h2>
+                <div id="result-table"></div>
+            </section>
+
+            <section class="panel">
+                <h2>Output</h2>
+                <div class="output-container">
+                    <div class="output-header">
+                        <span class="output-label">Console</span>
+                        <span class="output-status" id="output-status">Ready</span>
+                    </div>
+                    <pre class="output-console" id="output-console">Paste a bearer, or exchange an API token, then load operators.</pre>
+                </div>
+            </section>
+        </main>
+    </div>
+</body>
+
+</html>
