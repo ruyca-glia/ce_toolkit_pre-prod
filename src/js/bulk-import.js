@@ -225,7 +225,9 @@ async function runImport() {
             throw new Error("Parse the operator list before creating.");
         }
         if (auth.accessToken) {
-            logOutput("Bearer in use: " + auth.accessToken.substring(0, 5) + "...");
+            logOutput("Using the pasted bearer. The token is not written here.");
+        } else {
+            logOutput("The API token will be exchanged inside the function. The token is not written here.");
         }
         logOutput("Site: " + siteId);
         logOutput("Role: " + role);
