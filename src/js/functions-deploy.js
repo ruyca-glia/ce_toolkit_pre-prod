@@ -70,7 +70,7 @@ document.addEventListener("DOMContentLoaded", () => {
             setStatus("Requesting token");
             const result = await callFunction("token", collectAuth());
             tokenField.value = result.accessToken || "";
-            logOutput("Site token loaded: " + String(result.accessToken || "").substring(0, 5) + "...", true);
+            logOutput("Site token is ready. It stays in the password field and is not written here.", true);
             setStatus("Token ready");
         } catch (error) {
             logOutput("Token request failed: " + error.message, true);
@@ -245,7 +245,9 @@ async function listFunctions() {
         const result = await callFunction("listFunctions", Object.assign(collectAuth(), { siteId: siteId }));
         renderFunctionChoices(result.functions || []);
         const count = (result.functions || []).length;
-        endWait(count ? "Listed " + count + " function(s)." : "No functions on that site.");
+        const lines = result.logs && result.logs.length ? result.logs : [count ? "Listed " + count + " function(s) on site " + siteId + "." : "No functions on site " + siteId + "."];
+        endWait(lines[0]);
+        lines.slice(1).forEach(logOutput);
         setStatus("Ready");
     } catch (error) {
         list.textContent = "List functions failed: " + error.message;
@@ -294,7 +296,9 @@ async function listVersions() {
         const result = await callFunction("listVersions", Object.assign(collectAuth(), { functionId: functionId }));
         renderVersionChoices(result.versions || [], result.activeId || "");
         const count = (result.versions || []).length;
-        endWait(count ? "Listed " + count + " version(s)." : "No versions yet.");
+        const lines = result.logs && result.logs.length ? result.logs : [count ? "Listed " + count + " version(s) for function " + functionId + "." : "No versions yet for function " + functionId + "."];
+        endWait(lines[0]);
+        lines.slice(1).forEach(logOutput);
         setStatus("Ready");
     } catch (error) {
         list.textContent = "List versions failed: " + error.message;
