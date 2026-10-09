@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="./css/tool-page.css">
     <script async src="https://api.glia.com/salemove_integration.js"></script>
     <script type="text/javascript" src="//libs.glia.com/axon.js"></script>
-    <script src="./js/batch-disabler.js" defer></script>
+    <script src="./js/batch-disabler.js?v=no-confirm" defer></script>
     <style>
         .tool-header .offboard-note {
             margin: 0.5rem 0 0;
@@ -190,6 +190,7 @@
                         <input id="confirm-run" type="checkbox">
                         Everything looks correct. Proceed.
                     </label>
+                    <p id="selection-note" class="form-hint">Select operators, then check the box to enable Disable selected.</p>
                 </div>
                 <button class="btn btn-primary" id="trigger-run" type="button" disabled>Disable selected</button>
                 <button class="btn btn-secondary" id="reset-session" type="button">Clear instance</button>
@@ -212,6 +213,15 @@
                 </div>
             </section>
         </main>
+    </div>
+
+    <div id="reset-dialog" class="hidden" style="position:fixed; inset:0; background:rgba(17,24,39,0.45); z-index:20; align-items:center; justify-content:center; padding:1rem;">
+        <section class="panel" style="max-width:420px; width:100%; margin:0;">
+            <h2>Clear this instance?</h2>
+            <p style="margin-bottom:1rem;">This removes the token, the bearer, the site IDs, the operator lists, and the current selections on this page.</p>
+            <button class="btn btn-primary" id="reset-yes" type="button">Yes, clear</button>
+            <button class="btn btn-secondary" id="reset-no" type="button">No</button>
+        </section>
     </div>
 </body>
 
