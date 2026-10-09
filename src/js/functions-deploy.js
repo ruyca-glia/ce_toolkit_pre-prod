@@ -155,12 +155,24 @@ function resetSession() {
     closeReset();
 }
 
+// Reuse the Glia bridge after the first lookup. A new lookup on every click adds wait.
+let gliaApiPromise = null;
+function gliaApi() {
+    if (!gliaApiPromise) {
+        gliaApiPromise = window.getGliaApi({ version: "v1" }).catch(function (error) {
+            gliaApiPromise = null;
+            throw error;
+        });
+    }
+    return gliaApiPromise;
+}
+
 // One call to the deployed Glia Function. The page does not call api.glia.com for this tool.
 async function callFunction(action, payload) {
     if (!FUNCTIONS_DEPLOY_URI) {
         throw new Error("The Functions Deploy invocation URI is not set yet.");
     }
-    const glia = await window.getGliaApi({ version: "v1" });
+    const glia = await gliaApi();
     const headers = await glia.getRequestHeaders();
     headers["Content-Type"] = "application/json";
     const response = await fetch(FUNCTIONS_DEPLOY_URI, {
@@ -219,18 +231,25 @@ function collectPayload() {
 
 // Ask the Glia Function to list functions on the site so the operator can pick one.
 async function listFunctions() {
+    const siteId = document.getElementById("update-site-id").value.trim();
+    const list = document.getElementById("function-list");
+    if (!siteId) {
+        list.textContent = "Site ID is required to list functions.";
+        logOutput("List functions failed: Site ID is required.", true);
+        setStatus("Failed");
+        return;
+    }
+    const endWait = beginWait("list-functions", "Pulling functions");
+    list.textContent = "Pulling functions...";
     try {
-        setStatus("Listing functions");
-        const siteId = document.getElementById("update-site-id").value.trim();
-        if (!siteId) {
-            throw new Error("Site ID is required to list functions.");
-        }
         const result = await callFunction("listFunctions", Object.assign(collectAuth(), { siteId: siteId }));
         renderFunctionChoices(result.functions || []);
-        logOutput("Listed " + (result.functions || []).length + " function(s).");
+        const count = (result.functions || []).length;
+        endWait(count ? "Listed " + count + " function(s)." : "No functions on that site.");
         setStatus("Ready");
     } catch (error) {
-        logOutput("List functions failed: " + error.message, true);
+        list.textContent = "List functions failed: " + error.message;
+        endWait("List functions failed: " + error.message);
         setStatus("Failed");
     }
 }
@@ -261,17 +280,25 @@ function renderFunctionChoices(functions) {
 
 // Ask the Glia Function to list versions so the operator can pick the base version.
 async function listVersions() {
+    const functionId = document.getElementById("function-id").value.trim();
+    const list = document.getElementById("version-list");
+    if (!functionId) {
+        list.textContent = "Function ID is required to list versions.";
+        logOutput("List versions failed: Function ID is required.", true);
+        setStatus("Failed");
+        return;
+    }
+    const endWait = beginWait("list-versions", "Pulling versions");
+    list.textContent = "Pulling versions...";
     try {
-        setStatus("Listing versions");
-        const functionId = document.getElementById("function-id").value.trim();
-        if (!functionId) {
-            throw new Error("Function ID is required to list versions.");
-        }
         const result = await callFunction("listVersions", Object.assign(collectAuth(), { functionId: functionId }));
         renderVersionChoices(result.versions || [], result.activeId || "");
+        const count = (result.versions || []).length;
+        endWait(count ? "Listed " + count + " version(s)." : "No versions yet.");
         setStatus("Ready");
     } catch (error) {
-        logOutput("List versions failed: " + error.message, true);
+        list.textContent = "List versions failed: " + error.message;
+        endWait("List versions failed: " + error.message);
         setStatus("Failed");
     }
 }
@@ -791,4 +818,34 @@ function logOutput(message, clear) {
 
 function setStatus(text) {
     outputStatus.textContent = text;
+}
+
+// The button and the console tick each second until the function answers.
+function beginWait(buttonId, label) {
+    const button = document.getElementById(buttonId);
+    const original = button.textContent;
+    button.disabled = true;
+    let seconds = 0;
+    logOutput(label + "...", true);
+    const line = outputConsole.lastChild;
+    setStatus(label);
+    const timer = setInterval(function () {
+        seconds += 1;
+        const text = label + "... " + seconds + "s";
+        if (line) {
+            line.textContent = text + "\n";
+        }
+        button.textContent = text;
+        setStatus(text);
+    }, 1000);
+    return function endWait(finalLine) {
+        clearInterval(timer);
+        button.disabled = false;
+        button.textContent = original;
+        if (finalLine && line) {
+            line.textContent = finalLine + "\n";
+            finalReport += finalLine + "\n";
+            sealedReport = finalReport;
+        }
+    };
 }
