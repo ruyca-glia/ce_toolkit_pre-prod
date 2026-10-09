@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CE Toolkit — Functions Deploy</title>
+    <link rel="stylesheet" href="./css/style.css">
+    <link rel="stylesheet" href="./css/automations.css">
+    <link rel="stylesheet" href="./css/tool-page.css">
+    <script async src="https://api.glia.com/salemove_integration.js"></script>
+    <script type="text/javascript" src="//libs.glia.com/axon.js"></script>
+    <script src="./js/functions-deploy.js?v=poll-10s" defer></script>
+    <style>
+        .panel .bearer-skip-note {
+            margin: 0 0 1rem;
+            color: #1d4ed8;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 6px;
+            padding: 0.45rem 0.7rem;
+            font-size: 0.875rem;
+        }
+
+        .panel .bearer-skip-note strong {
+            color: inherit;
+        }
+    </style>
+</head>
+
+<body>
+    <header class="header">
+        <div class="header-content">
+            <a href="../index.html" class="back-link">← Back to Dashboard</a>
+            <!-- Top right. Hidden until a mode is chosen, then it asks twice before clearing. -->
+            <button class="btn btn-secondary btn-small" id="reset-session" type="button">Reset session</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="tool-header">
+            <div class="tool-icon-large">🚀</div>
+            <div>
+                <h1>Functions Deploy</h1>
+                <p id="page-lead">Create a new Glia Function, or update one that already exists.</p>
+            </div>
+        </div>
+
+        <!-- First screen. Nothing else is shown until one of these is chosen. -->
+        <section class="panel" id="choice-screen">
+            <h2>Updating or making a new one?</h2>
+            <div class="tools-grid">
+                <button class="tool-card" id="choose-create" type="button" style="width:100%; cursor:pointer; font:inherit; text-align:left;">
+                    <div class="tool-icon">✨</div>
+                    <div class="tool-info">
+                        <h3>Make a new one</h3>
+                        <p>Create the function, upload version 1, and set that version as current automatically.</p>
+                    </div>
+                    <span class="tool-arrow">→</span>
+                </button>
+                <button class="tool-card" id="choose-update" type="button" style="width:100%; cursor:pointer; font:inherit; text-align:left;">
+                    <div class="tool-icon">🛠️</div>
+                    <div class="tool-info">
+                        <h3>Update an existing one</h3>
+                        <p>For version 2 and later. Build a new version from one that already exists, then make it current.</p>
+                    </div>
+                    <span class="tool-arrow">→</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Shown only after a choice. Token is shared by both modes. -->
+        <div id="workspace" class="hidden">
+            <section class="panel">
+                <h2>Site access token</h2>
+                <p class="form-hint" style="margin-bottom: 1rem;">The token needs functions:create for a new function, and functions:update to upload or deploy. Listing needs functions:read. Use https://api.glia.eu for Europe.</p>
+
+                <div class="form-group">
+                    <label for="base-url">Base URL</label>
+                    <input id="base-url" type="text" value="https://api.glia.com">
+                </div>
+                <div class="form-group">
+                    <label for="api-key-id">API Key ID</label>
+                    <input id="api-key-id" type="text" placeholder="Site API key id" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label for="api-key-secret">API Key Secret</label>
+                    <input id="api-key-secret" type="password" placeholder="Site API key secret" autocomplete="off">
+                    <span class="form-hint">Sent only to POST /sites/tokens. It is not saved in this page.</span>
+                </div>
+                <p class="bearer-skip-note"><strong>NOTE:</strong> Most CEs can obtain a bearer by signing in to the site and copying the token from that session. If you already have one, skip the API key and secret and paste the bearer below.</p>
+                <button class="btn btn-secondary" id="generate-token" type="button">Generate Token</button>
+                <div class="form-group" style="margin-top: 1.25rem;">
+                    <label for="access-token">Access token</label>
+                    <input id="access-token" type="password" placeholder="Filled after Generate Token" autocomplete="off" spellcheck="false">
+                    <span class="form-hint">Hidden like a password. It stays in this page only until you reset the session.</span>
+                </div>
+            </section>
+
+            <!-- Create: entity, then a brand-new version, then deploy. -->
+            <section class="panel" id="create-fields">
+                <h2>New function</h2>
+                <p class="form-hint" style="margin-bottom: 1rem;">Version 1 is created and set as the current version in this same run. The invocation URI is created with the function and does not change later.</p>
+                <div class="form-group">
+                    <label for="function-name">Function name</label>
+                    <input id="function-name" type="text" placeholder="My Function">
+                </div>
+                <div class="form-group">
+                    <label for="function-desc">Description</label>
+                    <input id="function-desc" type="text" placeholder="What this function does">
+                </div>
+                <div class="form-group">
+                    <label for="create-site-id">Site ID</label>
+                    <input id="create-site-id" type="text" placeholder="Site that will own this function">
+                    <span class="form-hint">One function belongs to one site. A site can have at most 30 functions.</span>
+                </div>
+                <div class="form-group">
+                    <label for="create-code">Function code</label>
+                    <textarea id="create-code" rows="12" placeholder="export function onInvoke(request, env) {&#10;  return Response.json({ message: 'Hello world' });&#10;}"></textarea>
+                    <span class="form-hint">Must define onInvoke and return JSON. Maximum 512,000 bytes. Bundle dependencies into this text before pasting.</span>
+                </div>
+                <div class="form-group">
+                    <label for="create-env">Environment variables (optional JSON)</label>
+                    <textarea id="create-env" rows="3" placeholder='{"EXTERNAL_SERVICE_API_KEY": "value"}'></textarea>
+                    <span class="form-hint">String or true/false values. Maximum 4,000 bytes for the whole object. Values stay private unless you list the key below.</span>
+                </div>
+                <div class="form-group">
+                    <label for="create-public-keys">Public environment variable keys (optional)</label>
+                    <input id="create-public-keys" type="text" placeholder="KEY_ONE, KEY_TWO">
+                    <span class="form-hint">Comma-separated. These values are visible in Glia Hub. Leave blank to keep every value private.</span>
+                </div>
+                <div class="form-group">
+                    <label for="create-headers">Header allowlist (optional)</label>
+                    <input id="create-headers" type="text" placeholder="x-function-header">
+                    <span class="form-hint">Comma-separated, up to 30. Empty means the function receives no request headers.</span>
+                </div>
+                <div class="form-group">
+                    <label for="create-compat">Compatibility date (optional)</label>
+                    <input id="create-compat" type="text" placeholder="YYYY-MM-DD">
+                    <span class="form-hint">Blank uses the newest workerd date. Set one if this code must keep behaving as it did on that date.</span>
+                </div>
+            </section>
+
+            <!-- Update: pick a function and a base version, then PATCH a new version from it. -->
+            <section class="panel hidden" id="update-fields">
+                <h2>Existing function</h2>
+                <p class="form-hint" style="margin-bottom: 1rem;">This creates a new version from the version you pick. It does not edit that version in place. The invocation URI stays the same.</p>
+                <div class="form-group">
+                    <label for="update-site-id">Site ID</label>
+                    <input id="update-site-id" type="text" placeholder="Site whose functions you want to list">
+                </div>
+                <button class="btn btn-secondary" id="list-functions" type="button">List functions</button>
+                <div id="function-list" style="margin-top: 1rem;"></div>
+
+                <div class="form-group" style="margin-top: 1.25rem;">
+                    <label for="function-id">Function ID</label>
+                    <input id="function-id" type="text" placeholder="Filled when you pick a function, or paste one">
+                </div>
+                <button class="btn btn-secondary" id="list-versions" type="button">List versions</button>
+                <div id="version-list" style="margin-top: 1rem;"></div>
+
+                <div class="form-group" style="margin-top: 1.25rem;">
+                    <label for="version-id">Base version ID</label>
+                    <input id="version-id" type="text" placeholder="Version this update is based on">
+                </div>
+                <div class="form-group">
+                    <label for="update-code">New code (optional)</label>
+                    <textarea id="update-code" rows="12" placeholder="Leave blank to keep the base version's code"></textarea>
+                    <span class="form-hint">If you paste code, it must define onInvoke. Maximum 512,000 bytes. Blank keeps the base version's code.</span>
+                </div>
+                <div class="form-group">
+                    <label for="update-env">Environment variable changes (optional JSON)</label>
+                    <textarea id="update-env" rows="3" placeholder='{"NEW_KEY": "value", "OLD_KEY": null}'></textarea>
+                    <span class="form-hint">Only keys you include are changed. A null value deletes that key. Other keys stay as they are on the base version. Maximum 4,000 bytes.</span>
+                </div>
+                <div class="form-group">
+                    <label for="update-public-keys">Public environment variable keys (optional)</label>
+                    <input id="update-public-keys" type="text" placeholder="KEY_ONE, KEY_TWO">
+                </div>
+                <div class="form-group">
+                    <label for="update-headers">Header allowlist (optional)</label>
+                    <input id="update-headers" type="text" placeholder="x-function-header">
+                    <span class="form-hint">Blank inherits the base version's list. Type [] to clear it. Up to 30 names.</span>
+                </div>
+                <div class="form-group">
+                    <label for="update-compat">Compatibility date (optional)</label>
+                    <input id="update-compat" type="text" placeholder="YYYY-MM-DD">
+                    <span class="form-hint">Blank keeps the base version's compatibility date.</span>
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="form-group">
+                    <label class="checkbox-option" for="confirm-run">
+                        <input id="confirm-run" type="checkbox">
+                        Everything looks correct. Proceed.
+                    </label>
+                </div>
+                <button class="btn btn-primary" id="trigger-run" type="button" disabled>Create and deploy</button>
+            </section>
+
+            <!-- Outside the console. Stays visible for the whole deploy. -->
+            <section class="panel hidden" id="deploy-status">
+                <h2 id="deploy-status-title">Deploy in progress</h2>
+                <p id="deploy-stay" class="badge badge-warning" style="display:block; font-size:1rem; line-height:1.5; padding:0.75rem;"></p>
+                <p id="deploy-version-line" class="badge badge-info hidden" style="display:block; margin-top:0.75rem; font-size:1rem; padding:0.75rem;"></p>
+                <p id="deploy-current-line" class="badge badge-success hidden" style="display:block; margin-top:0.75rem; font-size:1rem; padding:0.75rem;"></p>
+            </section>
+
+            <section class="panel">
+                <h2>Output</h2>
+                <div class="output-container">
+                    <div class="output-header">
+                        <span class="output-status" id="output-status">Ready</span>
+                        <button class="btn btn-small" id="clear-output" type="button">Clear</button>
+                    </div>
+                    <pre class="output-console" id="output">Choose make or update to begin.</pre>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Two-step reset. The second yes is what actually clears the page. -->
+    <div id="reset-dialog" class="hidden" style="position:fixed; inset:0; background:rgba(17,24,39,0.45); z-index:20; align-items:center; justify-content:center; padding:1rem;">
+        <section class="panel" style="max-width:420px; width:100%; margin:0;">
+            <h2 id="reset-title">Are you sure you want to reset?</h2>
+            <p id="reset-copy" style="margin-bottom:1rem;">This asks one more time before clearing the session.</p>
+            <button class="btn btn-primary" id="reset-yes" type="button">Yes</button>
+            <button class="btn btn-secondary" id="reset-no" type="button">No</button>
+        </section>
+    </div>
+
+    <footer class="footer">
+        <p>Internal Tools v1.0 · For authorized team members only</p>
+    </footer>
+</body>
+
+</html>
