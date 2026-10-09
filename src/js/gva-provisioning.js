@@ -7,10 +7,10 @@ let userMail = "support@glia.com"; // Fallback email
 const USE_MOCK_DATA = false;
 
 // Glia Function Invoke Endpoints
-const jiraIssuesUrl = 'https://api.glia.com/integrations/5307a861-f742-44a4-a806-0e6e0a47187a/endpoint';
+const jiraIssuesUrl = 'https://api.glia.com/integrations/cc7b2a94-ef84-40df-95f5-228f0951d18b/endpoint';
 const writeLogURL = 'https://api.glia.com/integrations/f026a5b6-ba81-4211-99e1-3667bbaf16e9/endpoint';
 // Orchestrator (step 3). While empty, "Trigger" runs as a dry run: no Lambda is invoked.
-const provisionGVAUrl = 'https://api.glia.com/integrations/2b3b874a-15d6-4283-a2b7-1632046b565e/endpoint';
+const provisionGVAUrl = 'https://api.glia.com/integrations/3c3f8d39-7f7a-42a6-aaf8-58461cab66ce/endpoint';
 
 // Source of the flag / clone base rules in buildProvisioningParams(). Update the date when the rules are re-checked.
 const GUIDE_URL = 'https://glia.atlassian.net/wiki/spaces/ENG/pages/5436702721/GVA+Provisioning+Guide';
