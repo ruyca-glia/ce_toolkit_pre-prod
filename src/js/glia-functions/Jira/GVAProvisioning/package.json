@@ -1,0 +1,18 @@
+{
+  "name": "gvaprovisioning",
+  "version": "1.0.0",
+  "main": "jira_get_gvaprovisioning_ticket.js",
+  "scripts": {
+    "build": "./node_modules/esbuild/bin/esbuild --bundle --format=esm --outfile=function-out.js --target=es2020 jira_get_gvaprovisioning_ticket.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.1147.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

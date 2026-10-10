@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Glia Client Engineer Tools</title>
+    <link rel="stylesheet" href="./css/style.css">
+    <link rel="stylesheet" href="./css/automations.css">
+    <link rel="stylesheet" href="./css/tool-page.css">
+    <style>
+        /* Ticket details panel (scoped to this page; shared CSS is left untouched) */
+        .gva-section {
+            background-color: var(--white);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            padding: 16px 20px 8px;
+            margin-bottom: 16px;
+        }
+        .gva-section h4 {
+            margin: 0 0 4px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--gray-200);
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--gray-900);
+        }
+        .gva-kv {
+            display: grid;
+            grid-template-columns: 220px 1fr;
+            margin: 0;
+        }
+        .gva-kv dt,
+        .gva-kv dd {
+            margin: 0;
+            padding: 9px 0;
+            border-bottom: 1px solid var(--gray-100);
+            line-height: 1.4;
+        }
+        .gva-kv dt {
+            color: var(--gray-500);
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+        .gva-kv dd {
+            color: var(--gray-900);
+            overflow-wrap: anywhere;
+        }
+        .gva-kv dt:last-of-type,
+        .gva-kv dd:last-of-type {
+            border-bottom: none;
+        }
+        .gva-kv code {
+            font-family: var(--mono);
+            font-size: 0.85rem;
+            background-color: var(--gray-100);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .gva-alert {
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            border-left: 4px solid;
+            border-radius: var(--radius-sm);
+            line-height: 1.5;
+        }
+        .gva-alert ul {
+            margin: 6px 0 0;
+            padding-left: 20px;
+        }
+        .gva-alert li + li {
+            margin-top: 6px;
+        }
+        .gva-alert-error {
+            border-left-color: var(--status-error);
+            background-color: rgba(239, 68, 68, 0.08);
+        }
+        .gva-alert-warning {
+            border-left-color: var(--status-warning);
+            background-color: rgba(245, 158, 11, 0.1);
+        }
+        @media (max-width: 600px) {
+            .gva-kv { grid-template-columns: 1fr; }
+            .gva-kv dt { padding-bottom: 0; border-bottom: none; }
+            .gva-kv dd { padding-top: 2px; }
+        }
+    </style>
+    <script async src="https://api.glia.com/salemove_integration.js"></script>
+    <script type="text/javascript" src="//libs.glia.com/axon.js"></script>
+    <script src="./js/gva-provisioning.js" defer></script>
+</head>
+
+<body>
+    <header class="header">
+        <div class="header-content">
+            <a href="../index.html" class="back-link">← Back to Dashboard</a>
+            <span class="team-badge">Team Dashboard</span>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="tool-header">
+            <div class="tool-icon-large">🧬</div>
+            <div>
+                <h1>GVA Provisioning</h1>
+                <p>Provision a new GVA bot directly from your GVA Setup Jira tickets</p>
+            </div>
+        </div>
+
+        <section class="panel">
+            <h2>Requests to complete</h2>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Ticket</th>
+                        <th>Priority</th>
+                        <th>Request Type</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="ticketTableBody">
+                </tbody>
+            </table>
+        </section>
+
+        <div class="tool-layout" style="margin-top: 30px;">
+            <section class="panel" style="grid-column: 1 / -1;">
+                <h2>Output</h2>
+                <div class="output-container">
+                    <div class="output-header">
+                        <span class="output-status">Ready</span>
+                        <button class="btn btn-small" id="clear-output">Clear</button>
+                    </div>
+                    <pre class="output-console" id="output">Waiting for script execution... Select a ticket and click "Trigger Provisioning" to begin.</pre>
+                </div>
+                <p id="slackNotice" style="display: none; margin-top: 15px; padding: 10px; border-left: 4px solid var(--primary); background-color: rgba(81, 15, 164, 0.08);">
+                    Provisioning takes around 5 to 10 minutes. To track progress and the final result, please refer to the
+                    <strong>#gva-success</strong> Slack channel.
+                </p>
+            </section>
+        </div>
+
+    <footer class="footer">
+        <p>Internal Tools v1.0 · For authorized team members only</p>
+    </footer>
+
+</body>
+
+</html>
