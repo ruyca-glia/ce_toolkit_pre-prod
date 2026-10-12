@@ -1,0 +1,19 @@
+{
+  "name": "gvaprovisioning-orchestrator",
+  "version": "1.0.0",
+  "main": "provision_gva.js",
+  "scripts": {
+    "build": "./node_modules/esbuild/bin/esbuild --bundle --format=esm --outfile=function-out.js --target=es2020 --minify --keep-names provision_gva.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@aws-sdk/client-lambda": "^3.1148.0",
+    "@aws-sdk/client-secrets-manager": "^3.1148.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}
