@@ -2,12 +2,10 @@
 
 export async function onInvoke(request, env) {
     try {
-        const baseBearer = request.headers.get('Authorization2');
-
         const envelope = await request.json();
         const payload = typeof envelope.payload === 'string' ? JSON.parse(envelope.payload) : envelope.payload;
 
-        const { siteId, name, addy, url } = payload;
+        const { siteId, name, addy, url, bearer } = payload;
 
         const axios = require('axios');
 
@@ -17,6 +15,7 @@ export async function onInvoke(request, env) {
         const partition = "Main"; // Main or Staging
         const siteName = name;
         const address = [addy];
+        const baseBearer = bearer;
 
         const sameAccount = true;
 
