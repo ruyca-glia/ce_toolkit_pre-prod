@@ -2,12 +2,17 @@
 
 export async function onInvoke(request, env) {
     try {
+        let logs = [];
+
+        const log = (msg) => {
+            log(msg);
+            logs.push(msg);
+        };
+
         const envelope = await request.json();
         const payload = typeof envelope.payload === 'string' ? JSON.parse(envelope.payload) : envelope.payload;
 
         const { siteId, name, addy, url, bearer } = payload;
-
-        const axios = require('axios');
 
         // same account
         const baseSiteId = siteId;
@@ -60,23 +65,171 @@ export async function onInvoke(request, env) {
         const queueMap = new Map();
         const questionMap = new Map();
 
-        const baseApi = axios.create({
-            baseURL: baseURL,
-            headers: {
-                'Authorization': `Bearer ${baseBearer}`,
-                'Accept': "application/vnd.salemove.v1+json",
-                'Content-Type': "application/json"
+        const baseApi = {
+            async get(endpoint, options = {}) {
+                const response = await fetch(`${baseURL}${endpoint}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${baseBearer}`,
+                        'Accept': "application/vnd.salemove.v1+json",
+                        'Content-Type': "application/json",
+                        ...options.headers
+                    },
+                    ...options
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                const data = await response.json();
+                const contentType = response.headers.get('content-type') || '';
+                let headersObj = {};
+                response.headers.forEach((val, key) => { headersObj[key] = val; });
+                return { data, status: response.status, ok: response.ok, headers: headersObj };
+            },
+            async post(endpoint, body, options = {}) {
+                const response = await fetch(`${baseURL}${endpoint}`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${baseBearer}`,
+                        'Accept': "application/vnd.salemove.v1+json",
+                        'Content-Type': "application/json",
+                        ...options.headers
+                    },
+                    body: body instanceof ArrayBuffer || body instanceof Uint8Array || typeof body === 'string' ? body : JSON.stringify(body),
+                    ...options
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                const data = response.headers.get('content-type')?.includes('application/json') ? await response.json() : await response.text();
+                let headersObj = {};
+                response.headers.forEach((val, key) => { headersObj[key] = val; });
+                return { data, status: response.status, ok: response.ok, headers: headersObj };
+            },
+            async put(endpoint, body, options = {}) {
+                const response = await fetch(`${baseURL}${endpoint}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${baseBearer}`,
+                        'Accept': "application/vnd.salemove.v1+json",
+                        'Content-Type': "application/json",
+                        ...options.headers
+                    },
+                    body: body instanceof ArrayBuffer || body instanceof Uint8Array || typeof body === 'string' ? body : JSON.stringify(body),
+                    ...options
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                const data = response.headers.get('content-type')?.includes('application/json') ? await response.json() : await response.text();
+                let headersObj = {};
+                response.headers.forEach((val, key) => { headersObj[key] = val; });
+                return { data, status: response.status, ok: response.ok, headers: headersObj };
+            },
+            async patch(endpoint, body, options = {}) {
+                const response = await fetch(`${baseURL}${endpoint}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${baseBearer}`,
+                        'Accept': "application/vnd.salemove.v1+json",
+                        'Content-Type': "application/json",
+                        ...options.headers
+                    },
+                    body: body instanceof ArrayBuffer || body instanceof Uint8Array || typeof body === 'string' ? body : JSON.stringify(body),
+                    ...options
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                const data = response.headers.get('content-type')?.includes('application/json') ? await response.json() : await response.text();
+                let headersObj = {};
+                response.headers.forEach((val, key) => { headersObj[key] = val; });
+                return { data, status: response.status, ok: response.ok, headers: headersObj };
             }
-        });
+        };
 
-        const newApi = axios.create({
-            baseURL: baseURL,
-            headers: {
-                'Authorization': `Bearer ${sameAccount ? baseBearer : newBearer}`,
-                'Accept': "application/vnd.salemove.v1+json",
-                'Content-Type': "application/json"
+        const activeNewBearer = sameAccount ? baseBearer : newBearer;
+        const newApi = {
+            async get(endpoint, options = {}) {
+                const response = await fetch(`${baseURL}${endpoint}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${activeNewBearer}`,
+                        'Accept': "application/vnd.salemove.v1+json",
+                        'Content-Type': "application/json",
+                        ...options.headers
+                    },
+                    ...options
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                const data = await response.json();
+                let headersObj = {};
+                response.headers.forEach((val, key) => { headersObj[key] = val; });
+                return { data, status: response.status, ok: response.ok, headers: headersObj };
+            },
+            async post(endpoint, body, options = {}) {
+                const response = await fetch(`${baseURL}${endpoint}`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${activeNewBearer}`,
+                        'Accept': "application/vnd.salemove.v1+json",
+                        'Content-Type': "application/json",
+                        ...options.headers
+                    },
+                    body: body instanceof ArrayBuffer || body instanceof Uint8Array || typeof body === 'string' ? body : JSON.stringify(body),
+                    ...options
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                const data = response.headers.get('content-type')?.includes('application/json') ? await response.json() : await response.text();
+                let headersObj = {};
+                response.headers.forEach((val, key) => { headersObj[key] = val; });
+                return { data, status: response.status, ok: response.ok, headers: headersObj };
+            },
+            async put(endpoint, body, options = {}) {
+                const response = await fetch(`${baseURL}${endpoint}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${activeNewBearer}`,
+                        'Accept': "application/vnd.salemove.v1+json",
+                        'Content-Type': "application/json",
+                        ...options.headers
+                    },
+                    body: body instanceof ArrayBuffer || body instanceof Uint8Array || typeof body === 'string' ? body : JSON.stringify(body),
+                    ...options
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                const data = response.headers.get('content-type')?.includes('application/json') ? await response.json() : await response.text();
+                let headersObj = {};
+                response.headers.forEach((val, key) => { headersObj[key] = val; });
+                return { data, status: response.status, ok: response.ok, headers: headersObj };
+            },
+            async patch(endpoint, body, options = {}) {
+                const response = await fetch(`${baseURL}${endpoint}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${activeNewBearer}`,
+                        'Accept': "application/vnd.salemove.v1+json",
+                        'Content-Type': "application/json",
+                        ...options.headers
+                    },
+                    body: body instanceof ArrayBuffer || body instanceof Uint8Array || typeof body === 'string' ? body : JSON.stringify(body),
+                    ...options
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                const data = response.headers.get('content-type')?.includes('application/json') ? await response.json() : await response.text();
+                let headersObj = {};
+                response.headers.forEach((val, key) => { headersObj[key] = val; });
+                return { data, status: response.status, ok: response.ok, headers: headersObj };
             }
-        });
+        };
 
         async function cloneSite() {
             try {
@@ -89,7 +242,7 @@ export async function onInvoke(request, env) {
                 const response = await baseApi.post(`/sites`, body);
                 newSite.id = response.data.id
             } catch (error) {
-                console.log("Error creating site:");
+                log("Error creating site:");
                 throw new Error(error.message);
             }
         }
@@ -97,7 +250,7 @@ export async function onInvoke(request, env) {
         async function getPartition(environment) {
             try {
                 const response = await newApi.get(`/partitions`);
-                response.data.partitions ? newSite.partitions = response.data.partitions : console.log("No partitions found.");
+                response.data.partitions ? newSite.partitions = response.data.partitions : log("No partitions found.");
 
                 let partitionId = "";
                 let defaultPartitionId = "";
@@ -121,7 +274,7 @@ export async function onInvoke(request, env) {
 
                 return partitionId;
             } catch (error) {
-                console.log("Error getting partitions:");
+                log("Error getting partitions:");
                 throw new Error(error.message);
             }
         }
@@ -129,7 +282,7 @@ export async function onInvoke(request, env) {
         async function getPartitions(environment) {
             try {
                 const response = await newApi.get(`/partitions`);
-                response.data.partitions ? newSite.partitions = response.data.partitions : console.log("No partitions found.");
+                response.data.partitions ? newSite.partitions = response.data.partitions : log("No partitions found.");
 
                 for (const partition of newSite.partitions) {
                     if (partition.name == environment) {
@@ -138,7 +291,7 @@ export async function onInvoke(request, env) {
                 }
 
             } catch (error) {
-                console.log("Error getting partitions:");
+                log("Error getting partitions:");
                 throw new Error(error.message);
             }
         }
@@ -146,7 +299,7 @@ export async function onInvoke(request, env) {
         async function cloneSchedulingPolicies() {
             try {
                 const response = await baseApi.get(`/queues/scheduling_policies?site_ids[]=${baseSite.id}`);
-                response.data.scheduling_policies ? baseSite.policies = response.data.scheduling_policies : console.log("No scheduling policies found.");
+                response.data.scheduling_policies ? baseSite.policies = response.data.scheduling_policies : log("No scheduling policies found.");
 
                 for (let i = 0; i < baseSite.policies.length; i++) {
                     const policy = baseSite.policies[i];
@@ -163,7 +316,7 @@ export async function onInvoke(request, env) {
                     policyMap.set(policy.id, response.data.id);
                 }
             } catch (error) {
-                console.log("Error cloning scheduling policies:");
+                log("Error cloning scheduling policies:");
                 throw new Error(error.message);
             }
         }
@@ -171,7 +324,7 @@ export async function onInvoke(request, env) {
         async function cloneSchedulingExceptions() {
             try {
                 const response = await baseApi.get(`/queues/scheduling_exception_policies?view=full&site_ids[]=${baseSite.id}`);
-                response.data.scheduling_exception_policies ? baseSite.exceptions = response.data.scheduling_exception_policies : console.log("No scheduling exceptions found.");
+                response.data.scheduling_exception_policies ? baseSite.exceptions = response.data.scheduling_exception_policies : log("No scheduling exceptions found.");
 
                 for (let i = 0; i < baseSite.exceptions.length; i++) {
                     const exception = baseSite.exceptions[i];
@@ -188,7 +341,7 @@ export async function onInvoke(request, env) {
                     policyMap.set(exception.id, response.data.id);
                 }
             } catch (error) {
-                console.log("Error cloning scheduling exceptions:");
+                log("Error cloning scheduling exceptions:");
                 throw new Error(error.message);
             }
         }
@@ -196,10 +349,10 @@ export async function onInvoke(request, env) {
         async function getTeams() {
             try {
                 const response = await baseApi.get(`/teams?site_ids[]=${baseSite.id}`);
-                response.data.teams ? baseSite.teams = response.data.teams : console.log("No teams found.");
+                response.data.teams ? baseSite.teams = response.data.teams : log("No teams found.");
 
                 const res = await newApi.get(`/teams?site_ids[]=${newSite.id}`);
-                res.data.teams ? newSite.teams = res.data.teams : console.log("No teams found.");
+                res.data.teams ? newSite.teams = res.data.teams : log("No teams found.");
 
                 // Create the team ID map between the base site and the new site
                 const tempTeamMap = new Map();
@@ -212,7 +365,7 @@ export async function onInvoke(request, env) {
                     teamMap.set(oldId, newTeam.id);
                 }
             } catch (error) {
-                console.log("Error syncing team mappings:");
+                log("Error syncing team mappings:");
                 throw new Error(error.message);
             }
         }
@@ -231,7 +384,7 @@ export async function onInvoke(request, env) {
                     }
                 }
             } catch (error) {
-                console.log("Error updating teams partition:");
+                log("Error updating teams partition:");
                 throw new Error(error.message);
             }
         }
@@ -240,7 +393,7 @@ export async function onInvoke(request, env) {
             try {
                 // Get queues from the base site
                 const response = await baseApi.get(`/queues?site_ids[]=${baseSite.id}`);
-                response.data.queues ? baseSite.queues = response.data.queues : console.log("No queues found.");
+                response.data.queues ? baseSite.queues = response.data.queues : log("No queues found.");
 
                 // Create temp map to efficiently create queue map below
                 const tempQueueMap = new Map();
@@ -288,12 +441,12 @@ export async function onInvoke(request, env) {
                     newSite.queues.push(response.data);
 
                     queueMap.set(tempQueueMap.get(response.data.name), response.data.id);
-                    console.log("Cloned " + queue.name + " queue.");
+                    log("Cloned " + queue.name + " queue.");
                 }
 
                 await updateQueueFallbacks();
             } catch (error) {
-                console.log("Error cloning queues:");
+                log("Error cloning queues:");
                 throw new Error(error.message);
             }
         }
@@ -310,7 +463,7 @@ export async function onInvoke(request, env) {
                     }
                 }
             } catch (error) {
-                console.log("Error updating queue fallbacks:");
+                log("Error updating queue fallbacks:");
                 throw new Error(error.message);
             }
         }
@@ -318,7 +471,7 @@ export async function onInvoke(request, env) {
         async function cloneQuestions() {
             try {
                 const response = await baseApi.get(`/sites/${baseSite.id}/survey_questions`);
-                response.data ? baseSite.questions = response.data : console.log("No questions found.");
+                response.data ? baseSite.questions = response.data : log("No questions found.");
 
                 for (const question of baseSite.questions) {
                     let body = {
@@ -337,7 +490,7 @@ export async function onInvoke(request, env) {
                     questionMap.set(question.id, response.data.id);
                 }
             } catch (error) {
-                console.log("Error cloning survey questions:");
+                log("Error cloning survey questions:");
                 throw new Error(error.message);
             }
         }
@@ -345,7 +498,7 @@ export async function onInvoke(request, env) {
         async function cloneSurveys() {
             try {
                 const response = await baseApi.get(`/sites/${baseSite.id}/surveys`);
-                response.data ? baseSite.surveys = response.data : console.log("No surveys found.");
+                response.data ? baseSite.surveys = response.data : log("No surveys found.");
 
                 for (const survey of baseSite.surveys) {
                     let body = {
@@ -385,7 +538,7 @@ export async function onInvoke(request, env) {
                     await newApi.post(`/sites/${newSite.id}/surveys`, body);
                 }
             } catch (error) {
-                console.log("Error cloning surveys:");
+                log("Error cloning surveys:");
                 throw new Error(error.message);
             }
         }
@@ -393,7 +546,7 @@ export async function onInvoke(request, env) {
         async function clonePlatformRules() {
             try {
                 const response = await baseApi.get(`/sites/${baseSite.id}/platform_rules`);
-                response.data.rules ? baseSite.platformRules = response.data.rules : console.log("No platform rules found.");
+                response.data.rules ? baseSite.platformRules = response.data.rules : log("No platform rules found.");
 
                 for (const rule of baseSite.platformRules) {
                     let body = {
@@ -429,7 +582,7 @@ export async function onInvoke(request, env) {
                     newSite.platformRules.push(res.data);
                 }
             } catch (error) {
-                console.log("Error cloning platform rules:");
+                log("Error cloning platform rules:");
                 throw new Error(error.message);
             }
         }
@@ -437,7 +590,7 @@ export async function onInvoke(request, env) {
         async function updateWebRules() {
             try {
                 const response = await baseApi.get(`/sites/${newSite.id}/business_rules`);
-                response.data.rules ? newSite.webRules = response.data.rules : console.log("No web rules found (on new site).");
+                response.data.rules ? newSite.webRules = response.data.rules : log("No web rules found (on new site).");
 
                 for (const rule of newSite.webRules) {
                     let body = {};
@@ -492,10 +645,10 @@ export async function onInvoke(request, env) {
                 if (newSite.webRules.length != 0) {
                     newSite.webRules = [];
                     const res = await baseApi.get(`/sites/${newSite.id}/business_rules`);
-                    res.data.rules ? newSite.webRules = response.data.rules : console.log("No web rules found to update (on new site).");
+                    res.data.rules ? newSite.webRules = response.data.rules : log("No web rules found to update (on new site).");
                 }
             } catch (error) {
-                console.log("Error processing business web rules:");
+                log("Error processing business web rules:");
                 throw new Error(error.message);
             }
         }
@@ -506,7 +659,7 @@ export async function onInvoke(request, env) {
 
                 while (url) {
                     const response = await baseApi.get(url);
-                    response.data.contacts ? baseSite.contacts = response.data.contacts : console.log("No contacts found.");
+                    response.data.contacts ? baseSite.contacts = response.data.contacts : log("No contacts found.");
 
                     for (const contact of baseSite.contacts) {
                         let body = {
@@ -531,8 +684,8 @@ export async function onInvoke(request, env) {
                     url = response.data.next_page ? response.data.next_page : null;
                 }
             } catch (error) {
-                console.log("Error cloning quick contacts:");
-                console.log(error);
+                log("Error cloning quick contacts:");
+                log(error);
                 throw new Error(error.message);
             }
         }
@@ -540,7 +693,7 @@ export async function onInvoke(request, env) {
         async function cloneCustomLocales() {
             try {
                 const response = await baseApi.get(`/visitor_app/sites/${baseSite.id}/custom_locales`);
-                response.data.custom_locales ? baseSite.locales = response.data.custom_locales : console.log("No custom locales found.");
+                response.data.custom_locales ? baseSite.locales = response.data.custom_locales : log("No custom locales found.");
 
                 for (const locale of baseSite.locales) {
                     const body = {
@@ -554,7 +707,7 @@ export async function onInvoke(request, env) {
                     await newApi.post(`/visitor_app/sites/${newSite.id}/custom_locales`, body);
                 }
             } catch (error) {
-                console.log("Error cloning custom locales:");
+                log("Error cloning custom locales:");
                 throw new Error(error.message);
             }
         }
@@ -563,7 +716,7 @@ export async function onInvoke(request, env) {
             try {
                 const response = await baseApi.get(`/masking_regular_expressions?site_id=${baseSite.id}`);
                 baseSite.piiMasks = response.data.masking_regular_expressions || [];
-                response.data.masking_regular_expressions ? baseSite.piiMasks = response.data.masking_regular_expressions : console.log("No custom PII masking found.");
+                response.data.masking_regular_expressions ? baseSite.piiMasks = response.data.masking_regular_expressions : log("No custom PII masking found.");
 
                 for (const mask of baseSite.piiMasks) {
                     let body = {
@@ -576,7 +729,7 @@ export async function onInvoke(request, env) {
                     await newApi.post(`/masking_regular_expressions`, body);
                 }
             } catch (error) {
-                console.log("Error cloning PII masking configurations:");
+                log("Error cloning PII masking configurations:");
                 throw new Error(error.message);
             }
         }
@@ -590,14 +743,18 @@ export async function onInvoke(request, env) {
                 let body = {};
 
                 if (baseSite.logoUrl) {
-                    const logoRes = await axios.get(baseSite.logoUrl, { responseType: 'arraybuffer' });
-                    const logoBase64 = `data:${logoRes.headers['content-type']};base64,${Buffer.from(logoRes.data).toString('base64')}`;
+                    const logoRes = await fetch(baseSite.logoUrl);
+                    if (!logoRes.ok) throw new Error(`HTTP error fetching logo: ${logoRes.status}`);
+                    const logoBuffer = await logoRes.arrayBuffer();
+                    const logoBase64 = `data:${logoRes.headers.get('content-type')};base64,${Buffer.from(logoBuffer).toString('base64')}`;
                     body.logo = logoBase64;
                 }
 
                 if (baseSite.pictureUrl) {
-                    const picRes = await axios.get(baseSite.pictureUrl, { responseType: 'arraybuffer' });
-                    const picBase64 = `data:${picRes.headers['content-type']};base64,${Buffer.from(picRes.data).toString('base64')}`;
+                    const picRes = await fetch(baseSite.pictureUrl);
+                    if (!picRes.ok) throw new Error(`HTTP error fetching picture: ${picRes.status}`);
+                    const picBuffer = await picRes.arrayBuffer();
+                    const picBase64 = `data:${picRes.headers.get('content-type')};base64,${Buffer.from(picBuffer).toString('base64')}`;
                     body.default_operator_picture = picBase64;
                 }
 
@@ -605,14 +762,14 @@ export async function onInvoke(request, env) {
                     await newApi.put(`/sites/${newSite.id}`, body);
                 }
             } catch (error) {
-                console.log("Error cloning site branding assets:");
+                log("Error cloning site branding assets:");
                 throw new Error(error.message);
             }
         }
 
         async function cloneSiteCollection() {
             try {
-                console.log("Starting site cloning");
+                log("Starting site cloning");
 
                 if (sameAccount) {
                     const partitionId = await getPartition(partition);
@@ -620,55 +777,64 @@ export async function onInvoke(request, env) {
                     await cloneSite();
 
                     await cloneSchedulingPolicies();
-                    console.log("Cloning scheduling policies complete\n");
+                    log("Cloning scheduling policies complete\n");
 
                     await cloneSchedulingExceptions();
-                    console.log("Cloning scheduling exceptions complete\n");
+                    log("Cloning scheduling exceptions complete\n");
 
                     await updateTeams(partitionId);
-                    console.log("Updating teams complete\n");
+                    log("Updating teams complete\n");
 
                     await cloneQueues(partitionId);
-                    console.log("Cloning queues complete\n");
+                    log("Cloning queues complete\n");
 
                     await cloneQuestions();
-                    console.log("Cloning questions complete\n");
+                    log("Cloning questions complete\n");
 
                     await cloneSurveys();
-                    console.log("Cloning survey complete\n");
+                    log("Cloning survey complete\n");
 
                     await clonePlatformRules();
-                    console.log("Cloning platform rules complete\n");
+                    log("Cloning platform rules complete\n");
 
                     await updateWebRules();
-                    console.log("Updating web rules complete\n");
+                    log("Updating web rules complete\n");
 
                     await cloneContacts();
-                    console.log("Cloning contacts complete\n");
+                    log("Cloning contacts complete\n");
 
                     await cloneCustomLocales();
-                    console.log("Cloning custom locales complete\n");
+                    log("Cloning custom locales complete\n");
 
                     await clonePiiMasking();
-                    console.log("Cloning PII masking complete\n");
+                    log("Cloning PII masking complete\n");
 
                     await cloneSiteImageAssets();
-                    console.log("Updating visual elements complete\n");
+                    log("Updating visual elements complete\n");
 
-                    console.log("Site cloning within same account complete.");
+                    log("Site cloning within same account complete.");
                 } else {
 
                 }
 
             } catch (error) {
+                log("Error cloning site: ");
                 throw new Error(error.message);
             }
         }
 
-
-        cloneSiteCollection();
+        await cloneSiteCollection();
+        return Response.json({
+            success: true,
+            message: "Site cloning completed successfully.",
+            logs: logs
+        });
     } catch (error) {
         console.error("Orchestrator Error:", error);
-        return Response.json({ success: false, error: error.message }, { status: 500 });
+        return Response.json({
+            success: false,
+            error: error.message,
+            logs: logs
+        }, { status: 500 });
     }
 }

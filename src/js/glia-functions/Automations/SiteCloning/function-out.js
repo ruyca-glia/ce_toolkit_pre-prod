@@ -1,23 +1,15 @@
-var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
-  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
-}) : x)(function(x) {
-  if (typeof require !== "undefined") return require.apply(this, arguments);
-  throw Error('Dynamic require of "' + x + '" is not supported');
-});
-
 // siteCloning3.2.js
 async function onInvoke(request, env) {
   try {
-    const baseBearer = request.headers.get("authorization") || request.headers.get("Authorization");
     const envelope = await request.json();
     const payload = typeof envelope.payload === "string" ? JSON.parse(envelope.payload) : envelope.payload;
-    const { siteId, name, addy, url } = payload;
-    const axios = __require("axios");
+    const { siteId, name, addy, url, bearer } = payload;
     const baseSiteId = siteId;
     const baseURL = url || "https://api.glia.com";
     const partition = "Main";
     const siteName = name;
     const address = [addy];
+    const baseBearer = bearer;
     const sameAccount = true;
     const newBearer = "";
     const newSiteId = "";
@@ -54,22 +46,186 @@ async function onInvoke(request, env) {
     const teamMap = /* @__PURE__ */ new Map();
     const queueMap = /* @__PURE__ */ new Map();
     const questionMap = /* @__PURE__ */ new Map();
-    const baseApi = axios.create({
-      baseURL,
-      headers: {
-        "Authorization": `Bearer ${baseBearer}`,
-        "Accept": "application/vnd.salemove.v1+json",
-        "Content-Type": "application/json"
+    const baseApi = {
+      async get(endpoint, options = {}) {
+        const response = await fetch(`${baseURL}${endpoint}`, {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${baseBearer}`,
+            "Accept": "application/vnd.salemove.v1+json",
+            "Content-Type": "application/json",
+            ...options.headers
+          },
+          ...options
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        const data = await response.json();
+        const contentType = response.headers.get("content-type") || "";
+        let headersObj = {};
+        response.headers.forEach((val, key) => {
+          headersObj[key] = val;
+        });
+        return { data, status: response.status, ok: response.ok, headers: headersObj };
+      },
+      async post(endpoint, body, options = {}) {
+        const response = await fetch(`${baseURL}${endpoint}`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${baseBearer}`,
+            "Accept": "application/vnd.salemove.v1+json",
+            "Content-Type": "application/json",
+            ...options.headers
+          },
+          body: body instanceof ArrayBuffer || body instanceof Uint8Array || typeof body === "string" ? body : JSON.stringify(body),
+          ...options
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        const data = response.headers.get("content-type")?.includes("application/json") ? await response.json() : await response.text();
+        let headersObj = {};
+        response.headers.forEach((val, key) => {
+          headersObj[key] = val;
+        });
+        return { data, status: response.status, ok: response.ok, headers: headersObj };
+      },
+      async put(endpoint, body, options = {}) {
+        const response = await fetch(`${baseURL}${endpoint}`, {
+          method: "PUT",
+          headers: {
+            "Authorization": `Bearer ${baseBearer}`,
+            "Accept": "application/vnd.salemove.v1+json",
+            "Content-Type": "application/json",
+            ...options.headers
+          },
+          body: body instanceof ArrayBuffer || body instanceof Uint8Array || typeof body === "string" ? body : JSON.stringify(body),
+          ...options
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        const data = response.headers.get("content-type")?.includes("application/json") ? await response.json() : await response.text();
+        let headersObj = {};
+        response.headers.forEach((val, key) => {
+          headersObj[key] = val;
+        });
+        return { data, status: response.status, ok: response.ok, headers: headersObj };
+      },
+      async patch(endpoint, body, options = {}) {
+        const response = await fetch(`${baseURL}${endpoint}`, {
+          method: "PATCH",
+          headers: {
+            "Authorization": `Bearer ${baseBearer}`,
+            "Accept": "application/vnd.salemove.v1+json",
+            "Content-Type": "application/json",
+            ...options.headers
+          },
+          body: body instanceof ArrayBuffer || body instanceof Uint8Array || typeof body === "string" ? body : JSON.stringify(body),
+          ...options
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        const data = response.headers.get("content-type")?.includes("application/json") ? await response.json() : await response.text();
+        let headersObj = {};
+        response.headers.forEach((val, key) => {
+          headersObj[key] = val;
+        });
+        return { data, status: response.status, ok: response.ok, headers: headersObj };
       }
-    });
-    const newApi = axios.create({
-      baseURL,
-      headers: {
-        "Authorization": `Bearer ${sameAccount ? baseBearer : newBearer}`,
-        "Accept": "application/vnd.salemove.v1+json",
-        "Content-Type": "application/json"
+    };
+    const activeNewBearer = sameAccount ? baseBearer : newBearer;
+    const newApi = {
+      async get(endpoint, options = {}) {
+        const response = await fetch(`${baseURL}${endpoint}`, {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${activeNewBearer}`,
+            "Accept": "application/vnd.salemove.v1+json",
+            "Content-Type": "application/json",
+            ...options.headers
+          },
+          ...options
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        const data = await response.json();
+        let headersObj = {};
+        response.headers.forEach((val, key) => {
+          headersObj[key] = val;
+        });
+        return { data, status: response.status, ok: response.ok, headers: headersObj };
+      },
+      async post(endpoint, body, options = {}) {
+        const response = await fetch(`${baseURL}${endpoint}`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${activeNewBearer}`,
+            "Accept": "application/vnd.salemove.v1+json",
+            "Content-Type": "application/json",
+            ...options.headers
+          },
+          body: body instanceof ArrayBuffer || body instanceof Uint8Array || typeof body === "string" ? body : JSON.stringify(body),
+          ...options
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        const data = response.headers.get("content-type")?.includes("application/json") ? await response.json() : await response.text();
+        let headersObj = {};
+        response.headers.forEach((val, key) => {
+          headersObj[key] = val;
+        });
+        return { data, status: response.status, ok: response.ok, headers: headersObj };
+      },
+      async put(endpoint, body, options = {}) {
+        const response = await fetch(`${baseURL}${endpoint}`, {
+          method: "PUT",
+          headers: {
+            "Authorization": `Bearer ${activeNewBearer}`,
+            "Accept": "application/vnd.salemove.v1+json",
+            "Content-Type": "application/json",
+            ...options.headers
+          },
+          body: body instanceof ArrayBuffer || body instanceof Uint8Array || typeof body === "string" ? body : JSON.stringify(body),
+          ...options
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        const data = response.headers.get("content-type")?.includes("application/json") ? await response.json() : await response.text();
+        let headersObj = {};
+        response.headers.forEach((val, key) => {
+          headersObj[key] = val;
+        });
+        return { data, status: response.status, ok: response.ok, headers: headersObj };
+      },
+      async patch(endpoint, body, options = {}) {
+        const response = await fetch(`${baseURL}${endpoint}`, {
+          method: "PATCH",
+          headers: {
+            "Authorization": `Bearer ${activeNewBearer}`,
+            "Accept": "application/vnd.salemove.v1+json",
+            "Content-Type": "application/json",
+            ...options.headers
+          },
+          body: body instanceof ArrayBuffer || body instanceof Uint8Array || typeof body === "string" ? body : JSON.stringify(body),
+          ...options
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        const data = response.headers.get("content-type")?.includes("application/json") ? await response.json() : await response.text();
+        let headersObj = {};
+        response.headers.forEach((val, key) => {
+          headersObj[key] = val;
+        });
+        return { data, status: response.status, ok: response.ok, headers: headersObj };
       }
-    });
+    };
     async function cloneSite() {
       try {
         const body = {
@@ -494,13 +650,17 @@ async function onInvoke(request, env) {
         baseSite.pictureUrl = response.data.default_operator_picture ? response.data.default_operator_picture.url : null;
         let body = {};
         if (baseSite.logoUrl) {
-          const logoRes = await axios.get(baseSite.logoUrl, { responseType: "arraybuffer" });
-          const logoBase64 = `data:${logoRes.headers["content-type"]};base64,${Buffer.from(logoRes.data).toString("base64")}`;
+          const logoRes = await fetch(baseSite.logoUrl);
+          if (!logoRes.ok) throw new Error(`HTTP error fetching logo: ${logoRes.status}`);
+          const logoBuffer = await logoRes.arrayBuffer();
+          const logoBase64 = `data:${logoRes.headers.get("content-type")};base64,${Buffer.from(logoBuffer).toString("base64")}`;
           body.logo = logoBase64;
         }
         if (baseSite.pictureUrl) {
-          const picRes = await axios.get(baseSite.pictureUrl, { responseType: "arraybuffer" });
-          const picBase64 = `data:${picRes.headers["content-type"]};base64,${Buffer.from(picRes.data).toString("base64")}`;
+          const picRes = await fetch(baseSite.pictureUrl);
+          if (!picRes.ok) throw new Error(`HTTP error fetching picture: ${picRes.status}`);
+          const picBuffer = await picRes.arrayBuffer();
+          const picBase64 = `data:${picRes.headers.get("content-type")};base64,${Buffer.from(picBuffer).toString("base64")}`;
           body.default_operator_picture = picBase64;
         }
         if (Object.keys(body).length > 0) {
@@ -548,7 +708,8 @@ async function onInvoke(request, env) {
         throw new Error(error.message);
       }
     }
-    cloneSiteCollection();
+    await cloneSiteCollection();
+    return Response.json({ success: true, message: "Site cloning completed successfully." });
   } catch (error) {
     console.error("Orchestrator Error:", error);
     return Response.json({ success: false, error: error.message }, { status: 500 });
