@@ -163,14 +163,44 @@ function renderLink(data) {
     copy.style.marginTop = "0.75rem";
     copy.textContent = "Copy link";
     copy.addEventListener("click", function () {
-        navigator.clipboard.writeText(data.url).then(function () {
-            copy.textContent = "Copied";
-        }).catch(function () {
-            copy.textContent = "Copy failed";
-        });
+        // The applet blocks navigator.clipboard. Select the link and copy from
+        // the page instead, so the button does not hit that permissions policy.
+        copySelectedLink(link, data.url, copy);
     });
     card.appendChild(copy);
     resultBox.appendChild(card);
+}
+
+// Put the URL on the clipboard from a selected field. This stays inside the
+// page and does not call the Clipboard API, which the applet blocks.
+function copySelectedLink(link, url, button) {
+    const field = document.createElement("textarea");
+    field.value = url;
+    field.setAttribute("readonly", "");
+    field.style.position = "fixed";
+    field.style.top = "0";
+    field.style.left = "0";
+    field.style.opacity = "0";
+    document.body.appendChild(field);
+    field.focus();
+    field.select();
+    let copied = false;
+    try {
+        copied = document.execCommand("copy");
+    } catch (error) {
+        copied = false;
+    }
+    document.body.removeChild(field);
+    if (copied) {
+        button.textContent = "Copied";
+        return;
+    }
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(link);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    button.textContent = "Selected. Press Cmd+C or Ctrl+C";
 }
 
 // The function allows 1–50 characters for name and company.
