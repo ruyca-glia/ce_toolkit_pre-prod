@@ -1,201 +1,253 @@
+import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
+import {
+  AppConfigClient,
+  ListApplicationsCommand,
+  ListEnvironmentsCommand,
+  ListConfigurationProfilesCommand,
+  ListHostedConfigurationVersionsCommand,
+  GetHostedConfigurationVersionCommand,
+  CreateHostedConfigurationVersionCommand,
+  StartDeploymentCommand
+} from "@aws-sdk/client-appconfig";
+
+const APPLICATION_BY_PAYLOAD = {
+  coreConfig: "gva-chat-adapter",
+  credentials: "gva-core"
+};
+
+const CACHE_MS = 10 * 60 * 1000;
+let cachedCreds = null;
+let cachedAt = 0;
+
 export async function onInvoke(request, env) {
+  const started = Date.now();
   try {
     const envelope = await request.json();
     const payload = typeof envelope.payload === "string" ? JSON.parse(envelope.payload) : envelope.payload || {};
-    const { issueKey, coreConfig, credentials } = payload;
 
-    // Core configuration and credentials are sent independently, so each
-    // request carries exactly one of them.
+    const appconfig = new AppConfigClient({
+      region: env.AWS_REGION || "us-east-1",
+      credentials: await getAppConfigCreds(env)
+    });
+
+    if (payload.operation === "list") {
+      const apps = await listAll(appconfig, ListApplicationsCommand);
+      return Response.json({
+        success: true,
+        result: apps.map((app) => ({ id: app.Id, name: app.Name })),
+        durationMs: Date.now() - started
+      });
+    }
+
+    const { issueKey, botName, coreConfig, credentials } = payload;
     if (coreConfig === undefined && credentials === undefined) {
       return Response.json({ success: false, error: "Provide either coreConfig or credentials" }, { status: 400 });
     }
-
-    if (coreConfig !== undefined) {
-      if (!coreConfig || typeof coreConfig !== "object" || Array.isArray(coreConfig)) {
-        return Response.json({ success: false, error: "coreConfig must be a JSON object" }, { status: 400 });
-      }
-      if (Object.keys(coreConfig).length === 0) {
-        return Response.json({ success: false, error: "coreConfig has no keys to change" }, { status: 400 });
-      }
+    if (coreConfig !== undefined && credentials !== undefined) {
+      return Response.json({ success: false, error: "Send coreConfig and credentials in separate requests" }, { status: 400 });
     }
 
-    if (credentials !== undefined) {
+    const profileName = String(botName || "").trim();
+    if (!profileName) {
+      return Response.json({ success: false, error: "botName is required so the configuration profile can be found" }, { status: 400 });
+    }
+
+    let content;
+    let applicationName;
+    if (coreConfig !== undefined) {
+      if (!isPlainObject(coreConfig) || Object.keys(coreConfig).length === 0) {
+        return Response.json({ success: false, error: "coreConfig must be a non-empty JSON object" }, { status: 400 });
+      }
+      applicationName = APPLICATION_BY_PAYLOAD.coreConfig;
+      content = coreConfig;
+    } else {
       if (!credentials?.secrets || !("api_key_id" in credentials.secrets) || !("api_key_secret" in credentials.secrets)) {
         return Response.json({
           success: false,
           error: 'credentials must be { "secrets": { "api_key_id": "", "api_key_secret": "" } }'
         }, { status: 400 });
       }
-      const idPreview = String(credentials.secrets.api_key_id || "").substring(0, 5);
-      console.log("api_key_id prefix: " + (idPreview ? idPreview + "..." : "(empty)"));
+      applicationName = APPLICATION_BY_PAYLOAD.credentials;
+      content = credentials;
     }
 
-    const doc = buildGvaConfigDocx({ issueKey: issueKey || "AD-HOC", coreConfig, credentials });
-    const filename = doc.filename;
-    const docBase64 = bytesToBase64(doc.bytes);
+    const application = await findNamedItem(
+      () => listAll(appconfig, ListApplicationsCommand),
+      applicationName,
+      "application"
+    );
+    const environment = await findEnvironment(appconfig, application.Id, env);
+    const profile = await findNamedItem(
+      () => listAll(appconfig, ListConfigurationProfilesCommand, { ApplicationId: application.Id }),
+      profileName,
+      "configuration profile"
+    );
+
+    const existing = await getLatestHostedContent(appconfig, application.Id, profile.Id);
+    const nextContent = existing && isPlainObject(existing) ? deepMerge(existing, content) : content;
+
+    const version = await appconfig.send(new CreateHostedConfigurationVersionCommand({
+      ApplicationId: application.Id,
+      ConfigurationProfileId: profile.Id,
+      Content: new TextEncoder().encode(JSON.stringify(nextContent)),
+      ContentType: "application/json"
+    }));
+
+    const deployment = await appconfig.send(new StartDeploymentCommand({
+      ApplicationId: application.Id,
+      EnvironmentId: environment.Id,
+      ConfigurationProfileId: profile.Id,
+      ConfigurationVersion: String(version.VersionNumber),
+      DeploymentStrategyId: env.APPCONFIG_DEPLOYMENT_STRATEGY_ID || "AppConfig.AllAtOnce"
+    }));
+
+    const result = {
+      application: application.Name,
+      environment: environment.Name,
+      profile: profile.Name,
+      versionNumber: version.VersionNumber,
+      deploymentNumber: deployment.DeploymentNumber,
+      state: deployment.State
+    };
 
     return Response.json({
       success: true,
-      filename,
-      docBase64,
+      result,
+      durationMs: Date.now() - started,
       summary: {
-        item: issueKey || "AD-HOC",
-        action: coreConfig ? "Wrote core configuration" : "Wrote credentials",
+        item: issueKey || profileName,
+        action: coreConfig
+          ? `Updated ${application.Name} profile ${profile.Name}`
+          : `Updated ${application.Name} credentials profile ${profile.Name}`,
         status: "OK",
         logs: [
-          coreConfig
-            ? `${Object.keys(coreConfig).length} top-level configuration key(s)`
-            : "Credentials payload",
-          `Downloaded ${filename}`
-        ],
-        filename
+          `Application ${application.Name}`,
+          `Profile ${profile.Name}`,
+          `Environment ${environment.Name}`,
+          `Hosted version ${version.VersionNumber}`,
+          `Deployment ${deployment.DeploymentNumber} (${deployment.State || "started"})`
+        ]
       }
     });
   } catch (error) {
-    console.error("ApplyGvaConfigCredentials error:", error);
-    return Response.json({ success: false, error: error.message }, { status: 500 });
+    return Response.json({
+      success: false,
+      error: `${error.name || "Error"}: ${error.message}`,
+      durationMs: Date.now() - started
+    }, { status: error.statusCode || 500 });
   }
 }
 
-function buildGvaConfigDocx({ issueKey, coreConfig, credentials }) {
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const filename = `gva-${coreConfig ? "core-config" : "credentials"}-${issueKey}-${stamp}.docx`;
+async function getAppConfigCreds(env) {
+  if (cachedCreds && Date.now() - cachedAt < CACHE_MS) return cachedCreds;
 
-  // The document carries the payload only: no title, ticket or timestamp.
-  const bodyXml = wordDocumentXml([
-    [JSON.stringify(coreConfig || credentials, null, 2), false]
-  ]);
-
-  const files = {
-    "[Content_Types].xml": contentTypesXml(),
-    "_rels/.rels": relsXml(),
-    "word/document.xml": bodyXml,
-    "word/_rels/document.xml.rels": documentRelsXml()
-  };
-  return { filename, bytes: zipStore(files) };
-}
-
-function contentTypesXml() {
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-</Types>`;
-}
-
-function relsXml() {
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>`;
-}
-
-function documentRelsXml() {
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`;
-}
-
-function wordDocumentXml(blocks) {
-  const paragraphs = blocks.flatMap(([text, heading]) => {
-    return String(text).split("\n").map((line) => {
-      const runProps = heading ? "<w:rPr><w:b/><w:sz w:val=\"28\"/></w:rPr>" : "";
-      return `<w:p><w:r>${runProps}<w:t xml:space="preserve">${xmlEscape(line)}</w:t></w:r></w:p>`;
-    });
-  }).join("");
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:body>${paragraphs}<w:sectPr/></w:body>
-</w:document>`;
-}
-
-function xmlEscape(value) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function bytesToBase64(bytes) {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary);
-}
-
-const CRC_TABLE = (() => {
-  const table = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-    table[n] = c >>> 0;
+  const accessKeyId = env["aws:accessKeyId"] || env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = env["aws:secretAccessKey"] || env.AWS_SECRET_ACCESS_KEY;
+  if (!accessKeyId || !secretAccessKey) {
+    const error = new Error("aws:accessKeyId and aws:secretAccessKey must be set on the Glia Function");
+    error.name = "ConfigurationError";
+    throw error;
   }
-  return table;
-})();
 
-function crc32(bytes) {
-  let crc = 0xFFFFFFFF;
-  for (let i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
-  return (crc ^ 0xFFFFFFFF) >>> 0;
-}
+  const bootstrap = { accessKeyId, secretAccessKey };
+  const secretId = env.APPCONFIG_SECRET_ID;
+  if (!secretId) {
+    cachedCreds = bootstrap;
+    cachedAt = Date.now();
+    return cachedCreds;
+  }
 
-function concatBytes(parts) {
-  const total = parts.reduce((n, p) => n + p.length, 0);
-  const out = new Uint8Array(total);
-  let offset = 0;
-  parts.forEach((p) => { out.set(p, offset); offset += p.length; });
-  return out;
-}
-
-function u16(n) {
-  const b = new Uint8Array(2);
-  new DataView(b.buffer).setUint16(0, n, true);
-  return b;
-}
-
-function u32(n) {
-  const b = new Uint8Array(4);
-  new DataView(b.buffer).setUint32(0, n, true);
-  return b;
-}
-
-function zipStore(fileMap) {
-  const encoder = new TextEncoder();
-  const locals = [];
-  const centrals = [];
-  let offset = 0;
-
-  Object.entries(fileMap).forEach(([name, text]) => {
-    const nameBytes = encoder.encode(name);
-    const data = encoder.encode(text);
-    const crc = crc32(data);
-    const local = concatBytes([
-      encoder.encode("PK\u0003\u0004"),
-      u16(20), u16(0), u16(0), u16(0), u16(0),
-      u32(crc), u32(data.length), u32(data.length),
-      u16(nameBytes.length), u16(0),
-      nameBytes, data
-    ]);
-    const central = concatBytes([
-      encoder.encode("PK\u0001\u0002"),
-      u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
-      u32(crc), u32(data.length), u32(data.length),
-      u16(nameBytes.length), u16(0), u16(0), u16(0), u16(0),
-      u32(0), u32(offset),
-      nameBytes
-    ]);
-    locals.push(local);
-    centrals.push(central);
-    offset += local.length;
+  const sm = new SecretsManagerClient({
+    region: env.AWS_REGION || "us-east-1",
+    credentials: bootstrap
   });
 
-  const centralDir = concatBytes(centrals);
-  const end = concatBytes([
-    encoder.encode("PK\u0005\u0006"),
-    u16(0), u16(0),
-    u16(centrals.length), u16(centrals.length),
-    u32(centralDir.length), u32(offset),
-    u16(0)
-  ]);
-  return concatBytes([...locals, centralDir, end]);
+  const res = await sm.send(new GetSecretValueCommand({ SecretId: secretId }));
+  const secret = JSON.parse(res.SecretString);
+  cachedCreds = {
+    accessKeyId: secret.accessKeyId,
+    secretAccessKey: secret.secretAccessKey
+  };
+  cachedAt = Date.now();
+  return cachedCreds;
+}
+
+async function listAll(client, Command, extra = {}) {
+  const items = [];
+  let NextToken;
+  do {
+    const res = await client.send(new Command({ ...extra, NextToken }));
+    items.push(...(res.Items || []));
+    NextToken = res.NextToken;
+  } while (NextToken);
+  return items;
+}
+
+async function findNamedItem(loadItems, name, kind) {
+  const wanted = name.trim().toLowerCase();
+  const items = await loadItems();
+  const match = items.find((item) => String(item.Name || "").trim().toLowerCase() === wanted);
+  if (match) return match;
+
+  const error = new Error(`${kind} "${name}" was not found. Available: ${items.map((item) => item.Name).filter(Boolean).join(", ") || "(none)"}`);
+  error.name = "NotFoundError";
+  error.statusCode = 404;
+  throw error;
+}
+
+async function findEnvironment(client, applicationId, env) {
+  const preferred = String(env.APPCONFIG_ENVIRONMENT_NAME || "dev").trim().toLowerCase();
+  const items = await listAll(client, ListEnvironmentsCommand, { ApplicationId: applicationId });
+  const match = items.find((item) => String(item.Name || "").trim().toLowerCase() === preferred)
+    || items.find((item) => String(item.Name || "").trim().toLowerCase() === "gva-dev")
+    || items.find((item) => String(item.Name || "").toLowerCase().includes("dev"));
+  if (match) return match;
+
+  const error = new Error(`No dev environment found for this application. Available: ${items.map((item) => item.Name).filter(Boolean).join(", ") || "(none)"}`);
+  error.name = "NotFoundError";
+  error.statusCode = 404;
+  throw error;
+}
+
+async function getLatestHostedContent(client, applicationId, profileId) {
+  const versions = await listAll(client, ListHostedConfigurationVersionsCommand, {
+    ApplicationId: applicationId,
+    ConfigurationProfileId: profileId
+  });
+  if (!versions.length) return null;
+
+  const latest = versions.reduce((best, item) => (
+    Number(item.VersionNumber) > Number(best.VersionNumber) ? item : best
+  ));
+
+  const hosted = await client.send(new GetHostedConfigurationVersionCommand({
+    ApplicationId: applicationId,
+    ConfigurationProfileId: profileId,
+    VersionNumber: latest.VersionNumber
+  }));
+
+  try {
+    const raw = hosted.Content;
+    const text = typeof raw === "string"
+      ? raw
+      : new TextDecoder().decode(raw);
+    return JSON.parse(text);
+  } catch (error) {
+    return null;
+  }
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function deepMerge(base, patch) {
+  if (!isPlainObject(base) || !isPlainObject(patch)) return patch;
+  const out = { ...base };
+  Object.keys(patch).forEach((key) => {
+    out[key] = isPlainObject(base[key]) && isPlainObject(patch[key])
+      ? deepMerge(base[key], patch[key])
+      : patch[key];
+  });
+  return out;
 }

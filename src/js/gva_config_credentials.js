@@ -252,15 +252,16 @@ function handleGoClick(index) {
     const collapsibleRow = document.createElement('tr');
     collapsibleRow.className = 'collapsible-row';
 
-    const botCode = formData['Bot Code'] || formData['botCode'] || 'N/A';
+    const botCode = firstFormValue(formData, ['Bot name', 'Bot Name', 'Bot Code', 'botCode', 'botName']) || 'N/A';
     const loaded = applyFormPayloadToEditors(formData);
+    if (botCode !== 'N/A') document.getElementById('botNameInput').value = botCode;
 
     collapsibleRow.innerHTML = `
         <td colspan="5">
             <div class="details-container">
                 <div class="details-grid">
                     <dt>Summary</dt><dd>${escapeHtml(issue.summary || '')}</dd>
-                    <dt>Bot Code</dt><dd><code>${escapeHtml(String(botCode))}</code></dd>
+                    <dt>Bot name</dt><dd><code>${escapeHtml(String(botCode))}</code></dd>
                     <dt>Form emails</dt><dd>${extractEmails(JSON.stringify(formData)).join(', ') || 'N/A'}</dd>
                     <dt>Editors</dt><dd>${loaded ? 'Ticket JSON loaded into the payload editors below.' : 'No JSON fields on this ticket. Edit the payload panel below.'}</dd>
                 </div>
@@ -357,6 +358,13 @@ async function sendCoreConfig({ ticketKey, button, approval }) {
     }
     clearCoreConfigError();
 
+    const botName = readBotName();
+    if (!botName) {
+        logOutput('Bot name is required. It must match the AppConfig configuration profile.', true);
+        setStatus('Missing bot name');
+        return;
+    }
+
     const keyPaths = listKeyPaths(coreConfig);
     await runSend({
         ticketKey,
@@ -365,10 +373,12 @@ async function sendCoreConfig({ ticketKey, button, approval }) {
         headerLines: [
             'STARTING CORE CONFIGURATION SEND',
             `Ticket: ${ticketKey}`,
+            `Bot: ${botName}`,
+            'Application: gva-chat-adapter',
             `Core configuration keys: ${keyPaths.length}`
         ],
-        payload: { issueKey: ticketKey, coreConfig },
-        action: 'GVA core configuration change'
+        payload: { operation: 'update', issueKey: ticketKey, botName, coreConfig },
+        action: 'Update gva-chat-adapter config'
     });
 }
 
@@ -392,6 +402,13 @@ async function sendCredentials({ ticketKey, button, approval }) {
         return;
     }
 
+    const botName = readBotName();
+    if (!botName) {
+        logOutput('Bot name is required. It must match the AppConfig configuration profile.', true);
+        setStatus('Missing bot name');
+        return;
+    }
+
     await runSend({
         ticketKey,
         sendBtn,
@@ -399,16 +416,19 @@ async function sendCredentials({ ticketKey, button, approval }) {
         headerLines: [
             'STARTING CREDENTIALS SEND',
             `Ticket: ${ticketKey}`,
+            `Bot: ${botName}`,
+            'Application: gva-core',
             `Credentials: ${JSON.stringify(redactCredentials(credentials))}`
         ],
-        payload: { issueKey: ticketKey, credentials },
-        action: 'GVA credentials update'
+        payload: { operation: 'update', issueKey: ticketKey, botName, credentials },
+        action: 'Update gva-core credentials'
     });
 }
 
 async function runSend({ ticketKey, sendBtn, approvalBox, headerLines, payload, action }) {
     sendBtn.disabled = true;
     finalReport = '';
+    const started = Date.now();
     const originalLabel = sendBtn.innerHTML;
     sendBtn.innerHTML = 'Sending…';
     setStatus('Running');
@@ -423,45 +443,35 @@ async function runSend({ ticketKey, sendBtn, approvalBox, headerLines, payload, 
     try {
         let result;
 
-        if (applyGvaConfigCredentialsUrl) {
-            const headers = await getGliaHeaders();
-            logOutput('Calling ApplyGvaConfigCredentials Glia Function…');
-            const res = await fetch(applyGvaConfigCredentialsUrl, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify(payload)
-            });
-            result = await res.json();
-            if (!result.success) throw new Error(result.error || 'Glia Function returned success: false');
-            if (result.docBase64 && result.filename) {
-                downloadBase64Docx(result.filename, result.docBase64);
-            }
-        } else {
-            logOutput('ApplyGvaConfigCredentials URL is not set. Building the Word stand-in in the browser.');
-            const doc = buildGvaConfigDocx(payload);
-            downloadBytes(doc.filename, doc.bytes);
-            result = {
-                success: true,
-                summary: {
-                    item: ticketKey,
-                    action: 'Wrote Word stand-in',
-                    status: 'OK',
-                    logs: [`Downloaded ${doc.filename}`],
-                    filename: doc.filename
-                }
-            };
+        if (!applyGvaConfigCredentialsUrl) {
+            throw new Error('ApplyGvaConfigCredentials URL is not set. Deploy the Glia Function and paste its endpoint here.');
         }
+
+        const headers = await getGliaHeaders();
+        logOutput('Calling ApplyGvaConfigCredentials Glia Function…');
+        const res = await fetch(applyGvaConfigCredentialsUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload)
+        });
+        result = await res.json();
+        if (!result.success) throw new Error(result.error || 'Glia Function returned success: false');
 
         const summary = result.summary || {
             item: ticketKey,
-            action: 'Wrote Word stand-in',
+            action: result.result
+                ? `AppConfig ${result.result.application} / ${result.result.profile}`
+                : 'Updated AppConfig',
             status: 'OK'
         };
+        if (result.result) {
+            logOutput(`   -> version=${result.result.versionNumber ?? '-'} deployment=${result.result.deploymentNumber ?? '-'} state=${result.result.state ?? '-'}`);
+        }
         (summary.logs || []).forEach((msg) => logOutput(`   -> ${msg}`));
         batchSummary.push(summary);
         logOutput('\nSEND FINISHED');
         renderSummaryTable(batchSummary);
-        await saveExecutionLog(ticketKey, executionStatus, batchSummary, action);
+        await saveExecutionLog(ticketKey, executionStatus, batchSummary, action, Date.now() - started);
         sendBtn.innerHTML = 'Completed';
         setStatus('Completed');
     } catch (error) {
@@ -469,7 +479,7 @@ async function runSend({ ticketKey, sendBtn, approvalBox, headerLines, payload, 
         executionStatus = 'Failed';
         batchSummary.push({ item: ticketKey, action: 'Error', status: 'Failed' });
         renderSummaryTable(batchSummary);
-        try { await saveExecutionLog(ticketKey, executionStatus, batchSummary, action); } catch (e) { console.error(e); }
+        try { await saveExecutionLog(ticketKey, executionStatus, batchSummary, action, Date.now() - started); } catch (e) { console.error(e); }
         sendBtn.innerHTML = 'Retry';
         sendBtn.disabled = false;
         setStatus('Failed');
@@ -504,6 +514,10 @@ function validateCoreConfig(coreConfig) {
     }
 
     return null;
+}
+
+function readBotName() {
+    return document.getElementById('botNameInput').value.trim();
 }
 
 function validateCredentials(credentials) {
@@ -880,17 +894,18 @@ function renderSummaryTable(summary) {
     concatTexts('Summary table rendered internally.');
 }
 
-async function saveExecutionLog(ticketKey, status, executionSummaryReport, action) {
+async function saveExecutionLog(ticketKey, status, executionSummaryReport, action, durationMs) {
     try {
         const headers = await getGliaHeaders();
         const payload = {
             siteId: CE_TEST_SITE_ID,
             userId: userMail,
-            action: action || 'GVA configuration change',
-            automation: 'GB Configs',
+            action: action || 'Update AppConfig (gva-dev)',
+            automation: 'GVA Config and Credentials',
             status,
             ticket: ticketKey,
-            url: applyGvaConfigCredentialsUrl || 'local-word-standin',
+            url: applyGvaConfigCredentialsUrl,
+            durationMs,
             finalReport: executionSummaryReport
                 .map((item) => `Item: ${item.item || ticketKey} Action: ${item.action} Status: ${item.status}`)
                 .join('\n')
@@ -930,164 +945,4 @@ function escapeHtml(value) {
     return String(value ?? '')
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
-}
-
-function downloadBytes(filename, bytes) {
-    const blob = new Blob([bytes], {
-        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-}
-
-function downloadBase64Docx(filename, base64) {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    downloadBytes(filename, bytes);
-}
-
-/* ---- Minimal .docx (ZIP STORE) for the AppConfig stand-in ---- */
-
-function buildGvaConfigDocx({ issueKey, coreConfig, credentials }) {
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `gva-${coreConfig ? 'core-config' : 'credentials'}-${issueKey}-${stamp}.docx`;
-
-    // The document carries the payload only: no title, ticket or timestamp.
-    const bodyXml = wordDocumentXml([
-        [JSON.stringify(coreConfig || credentials, null, 2), false]
-    ]);
-
-    const files = {
-        '[Content_Types].xml': contentTypesXml(),
-        '_rels/.rels': relsXml(),
-        'word/document.xml': bodyXml,
-        'word/_rels/document.xml.rels': documentRelsXml()
-    };
-    return { filename, bytes: zipStore(files) };
-}
-
-function contentTypesXml() {
-    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-</Types>`;
-}
-
-function relsXml() {
-    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>`;
-}
-
-function documentRelsXml() {
-    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`;
-}
-
-function wordDocumentXml(blocks) {
-    const paragraphs = blocks.flatMap(([text, heading]) => {
-        return String(text).split('\n').map((line) => {
-            const runProps = heading ? '<w:rPr><w:b/><w:sz w:val="28"/></w:rPr>' : '';
-            return `<w:p><w:r>${runProps}<w:t xml:space="preserve">${xmlEscape(line)}</w:t></w:r></w:p>`;
-        });
-    }).join('');
-    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:body>${paragraphs}<w:sectPr/></w:body>
-</w:document>`;
-}
-
-function xmlEscape(value) {
-    return String(value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
-
-const CRC_TABLE = (() => {
-    const table = new Uint32Array(256);
-    for (let n = 0; n < 256; n++) {
-        let c = n;
-        for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-        table[n] = c >>> 0;
-    }
-    return table;
-})();
-
-function crc32(bytes) {
-    let crc = 0xFFFFFFFF;
-    for (let i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
-    return (crc ^ 0xFFFFFFFF) >>> 0;
-}
-
-function concatBytes(parts) {
-    const total = parts.reduce((n, p) => n + p.length, 0);
-    const out = new Uint8Array(total);
-    let offset = 0;
-    parts.forEach((p) => { out.set(p, offset); offset += p.length; });
-    return out;
-}
-
-function u16(n) {
-    const b = new Uint8Array(2);
-    new DataView(b.buffer).setUint16(0, n, true);
-    return b;
-}
-
-function u32(n) {
-    const b = new Uint8Array(4);
-    new DataView(b.buffer).setUint32(0, n, true);
-    return b;
-}
-
-function zipStore(fileMap) {
-    const encoder = new TextEncoder();
-    const locals = [];
-    const centrals = [];
-    let offset = 0;
-
-    Object.entries(fileMap).forEach(([name, text]) => {
-        const nameBytes = encoder.encode(name);
-        const data = encoder.encode(text);
-        const crc = crc32(data);
-        const local = concatBytes([
-            encoder.encode('PK\u0003\u0004'),
-            u16(20), u16(0), u16(0), u16(0), u16(0),
-            u32(crc), u32(data.length), u32(data.length),
-            u16(nameBytes.length), u16(0),
-            nameBytes, data
-        ]);
-        const central = concatBytes([
-            encoder.encode('PK\u0001\u0002'),
-            u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
-            u32(crc), u32(data.length), u32(data.length),
-            u16(nameBytes.length), u16(0), u16(0), u16(0), u16(0),
-            u32(0), u32(offset),
-            nameBytes
-        ]);
-        locals.push(local);
-        centrals.push(central);
-        offset += local.length;
-    });
-
-    const centralDir = concatBytes(centrals);
-    const end = concatBytes([
-        new TextEncoder().encode('PK\u0005\u0006'),
-        u16(0), u16(0),
-        u16(centrals.length), u16(centrals.length),
-        u32(centralDir.length), u32(offset),
-        u16(0)
-    ]);
-    return concatBytes([...locals, centralDir, end]);
 }
