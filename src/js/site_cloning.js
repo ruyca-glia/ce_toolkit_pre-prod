@@ -109,7 +109,6 @@ async function writeAuditLog({ action, status, finalReport = '' }) {
 // Trigger on "Run Cloning" clicked
 document.getElementById('cloning-form').addEventListener('submit', function (e) {
     e.preventDefault();
-    console.log("clicked");
     clone();
 });
 
