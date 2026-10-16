@@ -1,14 +1,15 @@
 // siteCloning3.2.js
 async function onInvoke(request, env) {
+  let logs = [];
+  const log = (msg) => {
+    logs.push(msg);
+  };
   try {
     const envelope = await request.json();
     const payload = typeof envelope.payload === "string" ? JSON.parse(envelope.payload) : envelope.payload;
-    const { siteId, name, addy, url, bearer } = payload;
+    const { siteId, siteName, address, baseURL, bearer } = payload;
     const baseSiteId = siteId;
-    const baseURL = url || "https://api.glia.com";
     const partition = "Main";
-    const siteName = name;
-    const address = [addy];
     const baseBearer = bearer;
     const sameAccount = true;
     const newBearer = "";
@@ -230,20 +231,20 @@ async function onInvoke(request, env) {
       try {
         const body = {
           name: siteName,
-          addresses: address,
+          addresses: Array.isArray(address) ? address : [address],
           clone_from_id: baseSite.id
         };
         const response = await baseApi.post(`/sites`, body);
         newSite.id = response.data.id;
       } catch (error) {
-        console.log("Error creating site:");
-        throw new Error(error.message);
+        log("Error creating site:" + error.message);
+        throw new Error();
       }
     }
     async function getPartition(environment) {
       try {
         const response = await newApi.get(`/partitions`);
-        response.data.partitions ? newSite.partitions = response.data.partitions : console.log("No partitions found.");
+        response.data.partitions ? newSite.partitions = response.data.partitions : log("No partitions found.");
         let partitionId = "";
         let defaultPartitionId = "";
         for (const partition2 of newSite.partitions) {
@@ -262,28 +263,28 @@ async function onInvoke(request, env) {
         }
         return partitionId;
       } catch (error) {
-        console.log("Error getting partitions:");
-        throw new Error(error.message);
+        log("Error getting partitions: " + error.message);
+        throw new Error();
       }
     }
     async function getPartitions(environment) {
       try {
         const response = await newApi.get(`/partitions`);
-        response.data.partitions ? newSite.partitions = response.data.partitions : console.log("No partitions found.");
+        response.data.partitions ? newSite.partitions = response.data.partitions : log("No partitions found.");
         for (const partition2 of newSite.partitions) {
           if (partition2.name == environment) {
             return partition2.id;
           }
         }
       } catch (error) {
-        console.log("Error getting partitions:");
-        throw new Error(error.message);
+        log("Error getting partitions: " + error.message);
+        throw new Error();
       }
     }
     async function cloneSchedulingPolicies() {
       try {
         const response = await baseApi.get(`/queues/scheduling_policies?site_ids[]=${baseSite.id}`);
-        response.data.scheduling_policies ? baseSite.policies = response.data.scheduling_policies : console.log("No scheduling policies found.");
+        response.data.scheduling_policies ? baseSite.policies = response.data.scheduling_policies : log("No scheduling policies found.");
         for (let i = 0; i < baseSite.policies.length; i++) {
           const policy = baseSite.policies[i];
           const body = {
@@ -297,14 +298,14 @@ async function onInvoke(request, env) {
           policyMap.set(policy.id, response2.data.id);
         }
       } catch (error) {
-        console.log("Error cloning scheduling policies:");
-        throw new Error(error.message);
+        log("Error cloning scheduling policies: " + error.message);
+        throw new Error();
       }
     }
     async function cloneSchedulingExceptions() {
       try {
         const response = await baseApi.get(`/queues/scheduling_exception_policies?view=full&site_ids[]=${baseSite.id}`);
-        response.data.scheduling_exception_policies ? baseSite.exceptions = response.data.scheduling_exception_policies : console.log("No scheduling exceptions found.");
+        response.data.scheduling_exception_policies ? baseSite.exceptions = response.data.scheduling_exception_policies : log("No scheduling exceptions found.");
         for (let i = 0; i < baseSite.exceptions.length; i++) {
           const exception = baseSite.exceptions[i];
           const body = {
@@ -317,16 +318,16 @@ async function onInvoke(request, env) {
           policyMap.set(exception.id, response2.data.id);
         }
       } catch (error) {
-        console.log("Error cloning scheduling exceptions:");
-        throw new Error(error.message);
+        log("Error cloning scheduling exceptions: " + error.message);
+        throw new Error();
       }
     }
     async function getTeams() {
       try {
         const response = await baseApi.get(`/teams?site_ids[]=${baseSite.id}`);
-        response.data.teams ? baseSite.teams = response.data.teams : console.log("No teams found.");
+        response.data.teams ? baseSite.teams = response.data.teams : log("No teams found.");
         const res = await newApi.get(`/teams?site_ids[]=${newSite.id}`);
-        res.data.teams ? newSite.teams = res.data.teams : console.log("No teams found.");
+        res.data.teams ? newSite.teams = res.data.teams : log("No teams found.");
         const tempTeamMap = /* @__PURE__ */ new Map();
         for (const oldTeam of baseSite.teams) {
           tempTeamMap.set(oldTeam.name, oldTeam.id);
@@ -336,8 +337,8 @@ async function onInvoke(request, env) {
           teamMap.set(oldId, newTeam.id);
         }
       } catch (error) {
-        console.log("Error syncing team mappings:");
-        throw new Error(error.message);
+        log("Error syncing team mappings: " + error.message);
+        throw new Error();
       }
     }
     async function updateTeams(partitionId) {
@@ -352,14 +353,14 @@ async function onInvoke(request, env) {
           }
         }
       } catch (error) {
-        console.log("Error updating teams partition:");
-        throw new Error(error.message);
+        log("Error updating teams partition:");
       }
     }
     async function cloneQueues(partitionId) {
       try {
+        log("Starting queue cloning");
         const response = await baseApi.get(`/queues?site_ids[]=${baseSite.id}`);
-        response.data.queues ? baseSite.queues = response.data.queues : console.log("No queues found.");
+        response.data.queues ? baseSite.queues = response.data.queues : log("No queues found.");
         const tempQueueMap = /* @__PURE__ */ new Map();
         for (const oldQueue of baseSite.queues) {
           tempQueueMap.set(oldQueue.name, oldQueue.id);
@@ -397,33 +398,34 @@ async function onInvoke(request, env) {
           const response2 = await newApi.post(`/queues`, body);
           newSite.queues.push(response2.data);
           queueMap.set(tempQueueMap.get(response2.data.name), response2.data.id);
-          console.log("Cloned " + queue.name + " queue.");
+          log("Cloned " + queue.name + " queue.");
         }
         await updateQueueFallbacks();
       } catch (error) {
-        console.log("Error cloning queues:");
-        throw new Error(error.message);
+        log("Error cloning queues: " + error.message);
+        throw new Error();
       }
     }
     async function updateQueueFallbacks() {
       try {
-        for (const queue of baseSite.queues) {
-          if (queue.fallback_queue_id) {
+        for (const oldQueue of baseSite.queues) {
+          if (oldQueue.fallback_queue_id) {
             const body = {
-              fallback_queue_id: queueMap.get(queue.fallback_queue_id)
+              fallback_queue_id: queueMap.get(oldQueue.fallback_queue_id)
             };
-            await newApi.put(`/queues/${clonedQueueVal.newQueueID}`, body);
+            const newQueueId = queueMap.get(oldQueue.id);
+            await newApi.put(`/queues/${newQueueId}`, body);
           }
         }
       } catch (error) {
-        console.log("Error updating queue fallbacks:");
-        throw new Error(error.message);
+        log("Error updating queue fallbacks: " + error.message);
+        throw new Error();
       }
     }
     async function cloneQuestions() {
       try {
         const response = await baseApi.get(`/sites/${baseSite.id}/survey_questions`);
-        response.data ? baseSite.questions = response.data : console.log("No questions found.");
+        response.data ? baseSite.questions = response.data : log("No questions found.");
         for (const question of baseSite.questions) {
           let body = {
             name: question.name,
@@ -438,14 +440,14 @@ async function onInvoke(request, env) {
           questionMap.set(question.id, response2.data.id);
         }
       } catch (error) {
-        console.log("Error cloning survey questions:");
-        throw new Error(error.message);
+        log("Error cloning survey questions: " + error.message);
+        throw new Error();
       }
     }
     async function cloneSurveys() {
       try {
         const response = await baseApi.get(`/sites/${baseSite.id}/surveys`);
-        response.data ? baseSite.surveys = response.data : console.log("No surveys found.");
+        response.data ? baseSite.surveys = response.data : log("No surveys found.");
         for (const survey of baseSite.surveys) {
           let body = {
             name: survey.name,
@@ -478,14 +480,14 @@ async function onInvoke(request, env) {
           await newApi.post(`/sites/${newSite.id}/surveys`, body);
         }
       } catch (error) {
-        console.log("Error cloning surveys:");
-        throw new Error(error.message);
+        log("Error cloning surveys: " + error.message);
+        throw new Error();
       }
     }
     async function clonePlatformRules() {
       try {
         const response = await baseApi.get(`/sites/${baseSite.id}/platform_rules`);
-        response.data.rules ? baseSite.platformRules = response.data.rules : console.log("No platform rules found.");
+        response.data.rules ? baseSite.platformRules = response.data.rules : log("No platform rules found.");
         for (const rule of baseSite.platformRules) {
           let body = {
             site_id: newSite.id,
@@ -499,13 +501,16 @@ async function onInvoke(request, env) {
             let newConditions = [];
             for (const condition of rule.conditions) {
               let newCondition = { ...condition };
-              let newQueues = [];
-              if (condition.type === "from_queues") {
+              if (condition.type === "from_queues" && condition.queue_ids) {
+                let newQueues = [];
                 for (const oldQueueId of condition.queue_ids) {
-                  newQueues.push(queueMap.get(oldQueueId));
+                  if (queueMap.has(oldQueueId)) {
+                    newQueues.push(queueMap.get(oldQueueId));
+                  }
                 }
                 newCondition.queue_ids = newQueues;
               }
+              newConditions.push(newCondition);
             }
             body.conditions = newConditions;
           }
@@ -513,14 +518,14 @@ async function onInvoke(request, env) {
           newSite.platformRules.push(res.data);
         }
       } catch (error) {
-        console.log("Error cloning platform rules:");
-        throw new Error(error.message);
+        log("Error cloning platform rules: " + error.message);
+        throw new Error();
       }
     }
     async function updateWebRules() {
       try {
         const response = await baseApi.get(`/sites/${newSite.id}/business_rules`);
-        response.data.rules ? newSite.webRules = response.data.rules : console.log("No web rules found (on new site).");
+        response.data.rules ? newSite.webRules = response.data.rules : log("No web rules found (on new site).");
         for (const rule of newSite.webRules) {
           let body = {};
           let update = false;
@@ -567,19 +572,19 @@ async function onInvoke(request, env) {
         if (newSite.webRules.length != 0) {
           newSite.webRules = [];
           const res = await baseApi.get(`/sites/${newSite.id}/business_rules`);
-          res.data.rules ? newSite.webRules = response.data.rules : console.log("No web rules found to update (on new site).");
+          res.data.rules ? newSite.webRules = response.data.rules : log("No web rules found to update (on new site).");
         }
       } catch (error) {
-        console.log("Error processing business web rules:");
-        throw new Error(error.message);
+        log("Error processing business web rules: " + error.message);
+        throw new Error();
       }
     }
     async function cloneContacts() {
       try {
-        let url2 = `/contacts?site_ids[]=${baseSite.id}`;
-        while (url2) {
-          const response = await baseApi.get(url2);
-          response.data.contacts ? baseSite.contacts = response.data.contacts : console.log("No contacts found.");
+        let url = `/contacts?site_ids[]=${baseSite.id}`;
+        while (url) {
+          const response = await baseApi.get(url);
+          response.data.contacts ? baseSite.contacts = response.data.contacts : log("No contacts found.");
           for (const contact of baseSite.contacts) {
             let body = {
               site_id: newSite.id,
@@ -597,18 +602,18 @@ async function onInvoke(request, env) {
             }
             await newApi.post(`/contacts`, body);
           }
-          url2 = response.data.next_page ? response.data.next_page : null;
+          url = response.data.next_page ? response.data.next_page : null;
         }
       } catch (error) {
-        console.log("Error cloning quick contacts:");
-        console.log(error);
-        throw new Error(error.message);
+        log("Error cloning quick contacts: " + error.message);
+        throw new Error();
+        log(error);
       }
     }
     async function cloneCustomLocales() {
       try {
         const response = await baseApi.get(`/visitor_app/sites/${baseSite.id}/custom_locales`);
-        response.data.custom_locales ? baseSite.locales = response.data.custom_locales : console.log("No custom locales found.");
+        response.data.custom_locales ? baseSite.locales = response.data.custom_locales : log("No custom locales found.");
         for (const locale of baseSite.locales) {
           const body = {
             name: locale.name,
@@ -620,15 +625,15 @@ async function onInvoke(request, env) {
           await newApi.post(`/visitor_app/sites/${newSite.id}/custom_locales`, body);
         }
       } catch (error) {
-        console.log("Error cloning custom locales:");
-        throw new Error(error.message);
+        log("Error cloning custom locales: " + error.message);
+        throw new Error();
       }
     }
     async function clonePiiMasking() {
       try {
         const response = await baseApi.get(`/masking_regular_expressions?site_id=${baseSite.id}`);
         baseSite.piiMasks = response.data.masking_regular_expressions || [];
-        response.data.masking_regular_expressions ? baseSite.piiMasks = response.data.masking_regular_expressions : console.log("No custom PII masking found.");
+        response.data.masking_regular_expressions ? baseSite.piiMasks = response.data.masking_regular_expressions : log("No custom PII masking found.");
         for (const mask of baseSite.piiMasks) {
           let body = {
             site_id: newSite.id,
@@ -639,8 +644,8 @@ async function onInvoke(request, env) {
           await newApi.post(`/masking_regular_expressions`, body);
         }
       } catch (error) {
-        console.log("Error cloning PII masking configurations:");
-        throw new Error(error.message);
+        log("Error cloning PII masking configurations: " + error.message);
+        throw new Error();
       }
     }
     async function cloneSiteImageAssets() {
@@ -667,52 +672,56 @@ async function onInvoke(request, env) {
           await newApi.put(`/sites/${newSite.id}`, body);
         }
       } catch (error) {
-        console.log("Error cloning site branding assets:");
-        throw new Error(error.message);
+        log("Error cloning site branding assets:");
       }
     }
     async function cloneSiteCollection() {
       try {
-        console.log("Starting site cloning");
+        log("Starting site cloning");
         if (sameAccount) {
           const partitionId = await getPartition(partition);
           await cloneSite();
           await cloneSchedulingPolicies();
-          console.log("Cloning scheduling policies complete\n");
+          log("Cloning scheduling policies complete\n");
           await cloneSchedulingExceptions();
-          console.log("Cloning scheduling exceptions complete\n");
+          log("Cloning scheduling exceptions complete\n");
           await updateTeams(partitionId);
-          console.log("Updating teams complete\n");
+          log("Updating teams complete\n");
           await cloneQueues(partitionId);
-          console.log("Cloning queues complete\n");
+          log("Cloning queues complete\n");
           await cloneQuestions();
-          console.log("Cloning questions complete\n");
+          log("Cloning questions complete\n");
           await cloneSurveys();
-          console.log("Cloning survey complete\n");
+          log("Cloning survey complete\n");
           await clonePlatformRules();
-          console.log("Cloning platform rules complete\n");
+          log("Cloning platform rules complete\n");
           await updateWebRules();
-          console.log("Updating web rules complete\n");
-          await cloneContacts();
-          console.log("Cloning contacts complete\n");
+          log("Updating web rules complete\n");
           await cloneCustomLocales();
-          console.log("Cloning custom locales complete\n");
+          log("Cloning custom locales complete\n");
           await clonePiiMasking();
-          console.log("Cloning PII masking complete\n");
-          await cloneSiteImageAssets();
-          console.log("Updating visual elements complete\n");
-          console.log("Site cloning within same account complete.");
+          log("Cloning PII masking complete\n");
+          log("Site cloning within same account complete.");
         } else {
         }
       } catch (error) {
-        throw new Error(error.message);
+        log("Error cloning site: " + error.message);
+        throw new Error();
       }
     }
     await cloneSiteCollection();
-    return Response.json({ success: true, message: "Site cloning completed successfully." });
+    return Response.json({
+      success: true,
+      message: "Site cloning completed successfully.",
+      logs
+    });
   } catch (error) {
     console.error("Orchestrator Error:", error);
-    return Response.json({ success: false, error: error.message }, { status: 500 });
+    return Response.json({
+      success: false,
+      error: error.message,
+      logs
+    }, { status: 500 });
   }
 }
 export {
