@@ -23,7 +23,7 @@ export async function onInvoke(request, env) {
   const started = Date.now();
   try {
     const envelope = await request.json();
-    const payload = typeof envelope.payload === "string" ? JSON.parse(envelope.payload) : envelope.payload || {};
+    const payload = unwrapPayload(envelope);
 
     const appconfig = new AppConfigClient({
       region: env.AWS_REGION || "us-east-1",
@@ -164,10 +164,14 @@ async function getAppConfigCreds(env) {
 
   const res = await sm.send(new GetSecretValueCommand({ SecretId: secretId }));
   const secret = JSON.parse(res.SecretString);
-  cachedCreds = {
-    accessKeyId: secret.accessKeyId,
-    secretAccessKey: secret.secretAccessKey
-  };
+  const appAccessKeyId = secret.accessKeyId || secret.AWS_ACCESS_KEY_ID;
+  const appSecretAccessKey = secret.secretAccessKey || secret.AWS_SECRET_ACCESS_KEY;
+  if (!appAccessKeyId || !appSecretAccessKey) {
+    const error = new Error("APPCONFIG_SECRET_ID does not contain accessKeyId/secretAccessKey");
+    error.name = "ConfigurationError";
+    throw error;
+  }
+  cachedCreds = { accessKeyId: appAccessKeyId, secretAccessKey: appSecretAccessKey };
   cachedAt = Date.now();
   return cachedCreds;
 }
@@ -235,6 +239,21 @@ async function getLatestHostedContent(client, applicationId, profileId) {
   } catch (error) {
     return null;
   }
+}
+
+function unwrapPayload(envelope) {
+  if (!isPlainObject(envelope)) return {};
+  if (!("payload" in envelope)) return envelope;
+  const raw = envelope.payload;
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return isPlainObject(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return isPlainObject(raw) ? raw : {};
 }
 
 function isPlainObject(value) {

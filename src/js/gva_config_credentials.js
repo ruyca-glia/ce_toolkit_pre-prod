@@ -10,7 +10,16 @@ const CE_TEST_SITE_ID = 'a5c110f6-a4a5-47d9-bbf1-d03d7a5e5089';
 
 // Paste Glia Function endpoint URLs here after deploy.
 const jiraIssuesUrl = '';
-const applyGvaConfigCredentialsUrl = '';
+const applyGvaConfigCredentialsHubUrl = '';
+const applyGvaConfigCredentialsLocalUrl = 'http://127.0.0.1:8787';
+
+function applyGvaConfigCredentialsUrl() {
+    if (applyGvaConfigCredentialsHubUrl) return applyGvaConfigCredentialsHubUrl;
+    if (typeof location !== 'undefined' && (location.hostname === '127.0.0.1' || location.hostname === 'localhost')) {
+        return applyGvaConfigCredentialsLocalUrl;
+    }
+    return '';
+}
 
 // Per-bot core configuration prefilled into the UI. It doubles as the allow-list
 // the submitted JSON is validated against, so a CE can only change keys that
@@ -166,16 +175,20 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function getGliaHeaders() {
-    const glia = await window.getGliaApi({ version: 'v1' });
-    const headers = await glia.getRequestHeaders();
-    headers['Content-Type'] = 'application/json';
     try {
-        const userData = await glia.getUser();
-        if (userData && userData.email) userMail = userData.email;
+        const glia = await window.getGliaApi({ version: 'v1' });
+        const headers = await glia.getRequestHeaders();
+        headers['Content-Type'] = 'application/json';
+        try {
+            const userData = await glia.getUser();
+            if (userData && userData.email) userMail = userData.email;
+        } catch (error) {
+            console.warn('Could not retrieve Glia Operator info. Defaulting to fallback.', error);
+        }
+        return headers;
     } catch (error) {
-        console.warn('Could not retrieve Glia Operator info. Defaulting to fallback.', error);
+        return { 'Content-Type': 'application/json' };
     }
-    return headers;
 }
 
 async function getJiraTickets() {
@@ -443,13 +456,14 @@ async function runSend({ ticketKey, sendBtn, approvalBox, headerLines, payload, 
     try {
         let result;
 
-        if (!applyGvaConfigCredentialsUrl) {
+        const functionUrl = applyGvaConfigCredentialsUrl();
+        if (!functionUrl) {
             throw new Error('ApplyGvaConfigCredentials URL is not set. Deploy the Glia Function and paste its endpoint here.');
         }
 
         const headers = await getGliaHeaders();
         logOutput('Calling ApplyGvaConfigCredentials Glia Function…');
-        const res = await fetch(applyGvaConfigCredentialsUrl, {
+        const res = await fetch(functionUrl, {
             method: 'POST',
             headers,
             body: JSON.stringify(payload)
@@ -904,7 +918,7 @@ async function saveExecutionLog(ticketKey, status, executionSummaryReport, actio
             automation: 'GVA Config and Credentials',
             status,
             ticket: ticketKey,
-            url: applyGvaConfigCredentialsUrl,
+            url: applyGvaConfigCredentialsUrl(),
             durationMs,
             finalReport: executionSummaryReport
                 .map((item) => `Item: ${item.item || ticketKey} Action: ${item.action} Status: ${item.status}`)
