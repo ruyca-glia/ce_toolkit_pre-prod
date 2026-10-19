@@ -10,16 +10,7 @@ const CE_TEST_SITE_ID = 'a5c110f6-a4a5-47d9-bbf1-d03d7a5e5089';
 
 // Paste Glia Function endpoint URLs here after deploy.
 const jiraIssuesUrl = '';
-const applyGvaConfigCredentialsHubUrl = '';
-const applyGvaConfigCredentialsLocalUrl = 'http://127.0.0.1:8787';
-
-function applyGvaConfigCredentialsUrl() {
-    if (applyGvaConfigCredentialsHubUrl) return applyGvaConfigCredentialsHubUrl;
-    if (typeof location !== 'undefined' && (location.hostname === '127.0.0.1' || location.hostname === 'localhost')) {
-        return applyGvaConfigCredentialsLocalUrl;
-    }
-    return '';
-}
+const applyGvaConfigCredentialsUrl = '';
 
 // Per-bot core configuration prefilled into the UI. It doubles as the allow-list
 // the submitted JSON is validated against, so a CE can only change keys that
@@ -456,14 +447,13 @@ async function runSend({ ticketKey, sendBtn, approvalBox, headerLines, payload, 
     try {
         let result;
 
-        const functionUrl = applyGvaConfigCredentialsUrl();
-        if (!functionUrl) {
+        if (!applyGvaConfigCredentialsUrl) {
             throw new Error('ApplyGvaConfigCredentials URL is not set. Deploy the Glia Function and paste its endpoint here.');
         }
 
         const headers = await getGliaHeaders();
         logOutput('Calling ApplyGvaConfigCredentials Glia Function…');
-        const res = await fetch(functionUrl, {
+        const res = await fetch(applyGvaConfigCredentialsUrl, {
             method: 'POST',
             headers,
             body: JSON.stringify(payload)
@@ -918,7 +908,7 @@ async function saveExecutionLog(ticketKey, status, executionSummaryReport, actio
             automation: 'GVA Config and Credentials',
             status,
             ticket: ticketKey,
-            url: applyGvaConfigCredentialsUrl(),
+            url: applyGvaConfigCredentialsUrl,
             durationMs,
             finalReport: executionSummaryReport
                 .map((item) => `Item: ${item.item || ticketKey} Action: ${item.action} Status: ${item.status}`)

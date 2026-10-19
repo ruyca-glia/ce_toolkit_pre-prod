@@ -1,4 +1,3 @@
-import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import {
   AppConfigClient,
   ListApplicationsCommand,
@@ -141,37 +140,15 @@ export async function onInvoke(request, env) {
 async function getAppConfigCreds(env) {
   if (cachedCreds && Date.now() - cachedAt < CACHE_MS) return cachedCreds;
 
-  const accessKeyId = env["aws:accessKeyId"] || env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = env["aws:secretAccessKey"] || env.AWS_SECRET_ACCESS_KEY;
+  const accessKeyId = env["aws:accessKeyId"];
+  const secretAccessKey = env["aws:secretAccessKey"];
   if (!accessKeyId || !secretAccessKey) {
     const error = new Error("aws:accessKeyId and aws:secretAccessKey must be set on the Glia Function");
     error.name = "ConfigurationError";
     throw error;
   }
 
-  const bootstrap = { accessKeyId, secretAccessKey };
-  const secretId = env.APPCONFIG_SECRET_ID;
-  if (!secretId) {
-    cachedCreds = bootstrap;
-    cachedAt = Date.now();
-    return cachedCreds;
-  }
-
-  const sm = new SecretsManagerClient({
-    region: env.AWS_REGION || "us-east-1",
-    credentials: bootstrap
-  });
-
-  const res = await sm.send(new GetSecretValueCommand({ SecretId: secretId }));
-  const secret = JSON.parse(res.SecretString);
-  const appAccessKeyId = secret.accessKeyId || secret.AWS_ACCESS_KEY_ID;
-  const appSecretAccessKey = secret.secretAccessKey || secret.AWS_SECRET_ACCESS_KEY;
-  if (!appAccessKeyId || !appSecretAccessKey) {
-    const error = new Error("APPCONFIG_SECRET_ID does not contain accessKeyId/secretAccessKey");
-    error.name = "ConfigurationError";
-    throw error;
-  }
-  cachedCreds = { accessKeyId: appAccessKeyId, secretAccessKey: appSecretAccessKey };
+  cachedCreds = { accessKeyId, secretAccessKey };
   cachedAt = Date.now();
   return cachedCreds;
 }

@@ -13,11 +13,6 @@ src/js/glia-functions/Jira/info/
 src/js/glia-functions/Jira/package-lock.json
 
 
-# Local secrets — never commit
-.env
-.env.*
-!.env.example
-
 # Dependencies
 node_modules/
 

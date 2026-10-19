@@ -1,7 +1,10 @@
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 
 export async function onInvoke(request, env) {
-  const email = "carlos.gomez@glia.com";
+  const email = env.JIRA_USER_EMAIL;
+  if (!email) {
+    return Response.json({ success: false, error: "JIRA_USER_EMAIL must be set on the Glia Function" }, { status: 500 });
+  }
   const apiToken = await getJiraToken(env);
   const auth = btoa(`${email}:${apiToken}`);
   const cloudID = "e38b3211-6df7-40d9-b425-80bff15a78c8";
@@ -136,17 +139,19 @@ export async function onInvoke(request, env) {
 }
 
 async function getJiraToken(env) {
+  const accessKeyId = env["aws:accessKeyId"];
+  const secretAccessKey = env["aws:secretAccessKey"];
+  const secretId = env.JIRA_SECRET_ID;
+  if (!accessKeyId || !secretAccessKey || !secretId) {
+    throw new Error("aws:accessKeyId, aws:secretAccessKey, and JIRA_SECRET_ID must be set on the Glia Function");
+  }
+
   const client = new SecretsManagerClient({
-    region: "us-east-2",
-    credentials: {
-      accessKeyId: env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: env.AWS_SECRET_ACCESS_KEY
-    }
+    region: env.AWS_REGION || "us-east-2",
+    credentials: { accessKeyId, secretAccessKey }
   });
 
-  const command = new GetSecretValueCommand({
-    SecretId: "arn:aws:secretsmanager:us-east-2:404410098344:secret:jira_token_w_full_access-fzCtJS"
-  });
+  const command = new GetSecretValueCommand({ SecretId: secretId });
 
   const response = await client.send(command);
   const secret = JSON.parse(response.SecretString);

@@ -2,6 +2,8 @@
    Dark mode, scoped to the GVA Config and Credentials page
    Loaded only by gva_config_credentials.html. Every override is gated behind
    [data-theme="dark"] on <html>, so nothing here changes the light theme.
+   This is a page-level pitch. Other toolkit pages stay light until the team
+   agrees to roll the theme out everywhere.
    =========================================== */
 
 /* Theme switch in the page header, present in both themes. */
