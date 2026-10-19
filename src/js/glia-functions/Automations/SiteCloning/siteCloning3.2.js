@@ -1,25 +1,25 @@
-// audio assets don't copy over -> deleted in settings when copying
-
+// doesn't clone contacts or site image assets
 export async function onInvoke(request, env) {
-    try {
-        let logs = [];
+    let logs = [];
 
-        const log = (msg) => {
-            log(msg);
-            logs.push(msg);
-        };
+    const log = (msg) => {
+        logs.push(msg);
+    };
+    
+    try {
 
         const envelope = await request.json();
         const payload = typeof envelope.payload === 'string' ? JSON.parse(envelope.payload) : envelope.payload;
 
-        const { siteId, name, addy, url, bearer } = payload;
+        const { siteId, siteName, address, baseURL, bearer } = payload;
+        
 
         // same account
         const baseSiteId = siteId;
-        const baseURL = url || "https://api.glia.com";
+        // const baseURL = url || "https://api.glia.com";
         const partition = "Main"; // Main or Staging
-        const siteName = name;
-        const address = [addy];
+        // const siteName = name;
+        // const address = addy;
         const baseBearer = bearer;
 
         const sameAccount = true;
@@ -235,15 +235,15 @@ export async function onInvoke(request, env) {
             try {
                 const body = {
                     name: siteName,
-                    addresses: address,
+                    addresses: Array.isArray(address) ? address : [address],
                     clone_from_id: baseSite.id
                 };
 
                 const response = await baseApi.post(`/sites`, body);
                 newSite.id = response.data.id
             } catch (error) {
-                log("Error creating site:");
-                throw new Error(error.message);
+                log("Error creating site:" + error.message);
+                throw new Error();
             }
         }
 
@@ -274,8 +274,8 @@ export async function onInvoke(request, env) {
 
                 return partitionId;
             } catch (error) {
-                log("Error getting partitions:");
-                throw new Error(error.message);
+                log("Error getting partitions: " + error.message);
+                throw new Error();
             }
         }
 
@@ -291,8 +291,8 @@ export async function onInvoke(request, env) {
                 }
 
             } catch (error) {
-                log("Error getting partitions:");
-                throw new Error(error.message);
+                log("Error getting partitions: " + error.message);
+                throw new Error();
             }
         }
 
@@ -316,8 +316,8 @@ export async function onInvoke(request, env) {
                     policyMap.set(policy.id, response.data.id);
                 }
             } catch (error) {
-                log("Error cloning scheduling policies:");
-                throw new Error(error.message);
+                log("Error cloning scheduling policies: " + error.message);
+                throw new Error();
             }
         }
 
@@ -341,8 +341,8 @@ export async function onInvoke(request, env) {
                     policyMap.set(exception.id, response.data.id);
                 }
             } catch (error) {
-                log("Error cloning scheduling exceptions:");
-                throw new Error(error.message);
+                log("Error cloning scheduling exceptions: " + error.message);
+                throw new Error();
             }
         }
 
@@ -365,8 +365,8 @@ export async function onInvoke(request, env) {
                     teamMap.set(oldId, newTeam.id);
                 }
             } catch (error) {
-                log("Error syncing team mappings:");
-                throw new Error(error.message);
+                log("Error syncing team mappings: " + error.message);
+                throw new Error(); 
             }
         }
 
@@ -385,12 +385,13 @@ export async function onInvoke(request, env) {
                 }
             } catch (error) {
                 log("Error updating teams partition:");
-                throw new Error(error.message);
+                
             }
         }
 
         async function cloneQueues(partitionId) {
             try {
+                log("Starting queue cloning");
                 // Get queues from the base site
                 const response = await baseApi.get(`/queues?site_ids[]=${baseSite.id}`);
                 response.data.queues ? baseSite.queues = response.data.queues : log("No queues found.");
@@ -446,25 +447,28 @@ export async function onInvoke(request, env) {
 
                 await updateQueueFallbacks();
             } catch (error) {
-                log("Error cloning queues:");
-                throw new Error(error.message);
+                log("Error cloning queues: " + error.message);
+                throw new Error();
+                
             }
         }
 
         async function updateQueueFallbacks() {
             try {
-                for (const queue of baseSite.queues) {
-                    if (queue.fallback_queue_id) {
+                for (const oldQueue of baseSite.queues) {
+                    if (oldQueue.fallback_queue_id) {
                         const body = {
-                            fallback_queue_id: queueMap.get(queue.fallback_queue_id)
+                            fallback_queue_id: queueMap.get(oldQueue.fallback_queue_id)
                         }
+                        
+                        const newQueueId = queueMap.get(oldQueue.id);
 
-                        await newApi.put(`/queues/${clonedQueueVal.newQueueID}`, body);
+                        await newApi.put(`/queues/${newQueueId}`, body);
                     }
                 }
             } catch (error) {
-                log("Error updating queue fallbacks:");
-                throw new Error(error.message);
+                log("Error updating queue fallbacks: " + error.message);
+                throw new Error();
             }
         }
 
@@ -490,8 +494,9 @@ export async function onInvoke(request, env) {
                     questionMap.set(question.id, response.data.id);
                 }
             } catch (error) {
-                log("Error cloning survey questions:");
-                throw new Error(error.message);
+                log("Error cloning survey questions: " + error.message);
+                throw new Error();
+                
             }
         }
 
@@ -538,8 +543,9 @@ export async function onInvoke(request, env) {
                     await newApi.post(`/sites/${newSite.id}/surveys`, body);
                 }
             } catch (error) {
-                log("Error cloning surveys:");
-                throw new Error(error.message);
+                log("Error cloning surveys: " + error.message);
+                throw new Error();
+                
             }
         }
 
@@ -562,17 +568,19 @@ export async function onInvoke(request, env) {
                         let newConditions = [];
 
                         for (const condition of rule.conditions) {
-
                             let newCondition = { ...condition };
-                            let newQueues = [];
 
-                            if (condition.type === "from_queues") {
+                            if (condition.type === "from_queues" && condition.queue_ids) {
+                                let newQueues = [];
                                 for (const oldQueueId of condition.queue_ids) {
-                                    newQueues.push(queueMap.get(oldQueueId));
+                                    if (queueMap.has(oldQueueId)) {
+                                        newQueues.push(queueMap.get(oldQueueId));
+                                    }
                                 }
-
                                 newCondition.queue_ids = newQueues;
                             }
+
+                            newConditions.push(newCondition);
                         }
 
                         body.conditions = newConditions;
@@ -582,8 +590,9 @@ export async function onInvoke(request, env) {
                     newSite.platformRules.push(res.data);
                 }
             } catch (error) {
-                log("Error cloning platform rules:");
-                throw new Error(error.message);
+                log("Error cloning platform rules: " + error.message);
+                throw new Error();
+                
             }
         }
 
@@ -648,8 +657,9 @@ export async function onInvoke(request, env) {
                     res.data.rules ? newSite.webRules = response.data.rules : log("No web rules found to update (on new site).");
                 }
             } catch (error) {
-                log("Error processing business web rules:");
-                throw new Error(error.message);
+                log("Error processing business web rules: " + error.message);
+                throw new Error();
+                
             }
         }
 
@@ -684,9 +694,10 @@ export async function onInvoke(request, env) {
                     url = response.data.next_page ? response.data.next_page : null;
                 }
             } catch (error) {
-                log("Error cloning quick contacts:");
+                log("Error cloning quick contacts: " + error.message);
+                throw new Error();
                 log(error);
-                throw new Error(error.message);
+                
             }
         }
 
@@ -707,8 +718,9 @@ export async function onInvoke(request, env) {
                     await newApi.post(`/visitor_app/sites/${newSite.id}/custom_locales`, body);
                 }
             } catch (error) {
-                log("Error cloning custom locales:");
-                throw new Error(error.message);
+                log("Error cloning custom locales: " + error.message);
+                throw new Error();
+                
             }
         }
 
@@ -729,8 +741,9 @@ export async function onInvoke(request, env) {
                     await newApi.post(`/masking_regular_expressions`, body);
                 }
             } catch (error) {
-                log("Error cloning PII masking configurations:");
-                throw new Error(error.message);
+                log("Error cloning PII masking configurations: " + error.message);
+                throw new Error();
+                
             }
         }
 
@@ -763,7 +776,7 @@ export async function onInvoke(request, env) {
                 }
             } catch (error) {
                 log("Error cloning site branding assets:");
-                throw new Error(error.message);
+                
             }
         }
 
@@ -800,8 +813,9 @@ export async function onInvoke(request, env) {
                     await updateWebRules();
                     log("Updating web rules complete\n");
 
-                    await cloneContacts();
-                    log("Cloning contacts complete\n");
+                    // needs bearer token from the new site to work? I think
+                    // await cloneContacts();
+                    // log("Cloning contacts complete\n");
 
                     await cloneCustomLocales();
                     log("Cloning custom locales complete\n");
@@ -809,8 +823,9 @@ export async function onInvoke(request, env) {
                     await clonePiiMasking();
                     log("Cloning PII masking complete\n");
 
-                    await cloneSiteImageAssets();
-                    log("Updating visual elements complete\n");
+                    // needs bearer token from the new site to work? I think
+                    // await cloneSiteImageAssets();
+                    // log("Updating visual elements complete\n");
 
                     log("Site cloning within same account complete.");
                 } else {
@@ -818,8 +833,8 @@ export async function onInvoke(request, env) {
                 }
 
             } catch (error) {
-                log("Error cloning site: ");
-                throw new Error(error.message);
+                log("Error cloning site: " + error.message);
+                throw new Error();
             }
         }
 
