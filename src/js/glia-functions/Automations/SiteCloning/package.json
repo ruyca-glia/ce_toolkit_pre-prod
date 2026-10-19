@@ -1,0 +1,8 @@
+{
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  },
+  "scripts": {
+    "build": "./node_modules/esbuild/bin/esbuild  --bundle --format=esm --outfile=function-out.js --target=es2020 siteCloning3.2.js"
+  }
+}
