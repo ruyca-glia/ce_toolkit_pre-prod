@@ -1,0 +1,15 @@
+{
+  "name": "jira-ce-tkt-retrieval-gva-config-credentials",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "./node_modules/esbuild/bin/esbuild --bundle --format=esm --outfile=function-out.js --target=es2020 jira_ce_tkt_retrieval_gva_config_credentials.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.1065.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.2"
+  }
+}
