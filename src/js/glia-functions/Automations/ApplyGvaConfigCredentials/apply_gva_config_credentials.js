@@ -8,6 +8,7 @@ import {
   CreateHostedConfigurationVersionCommand,
   StartDeploymentCommand
 } from "@aws-sdk/client-appconfig";
+import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 
 const APPLICATION_BY_PAYLOAD = {
   coreConfig: "gva-chat-adapter",
@@ -24,9 +25,10 @@ export async function onInvoke(request, env) {
     const envelope = await request.json();
     const payload = unwrapPayload(envelope);
 
+    const iamCreds = await getAppConfigCreds(env);
     const appconfig = new AppConfigClient({
-      region: env.AWS_REGION || "us-east-1",
-      credentials: await getAppConfigCreds(env)
+      region: readEnvString(env, ["AWS_REGION", "region"]) || "us-east-1",
+      credentials: async () => iamCreds
     });
 
     if (payload.operation === "list") {
@@ -140,17 +142,83 @@ export async function onInvoke(request, env) {
 async function getAppConfigCreds(env) {
   if (cachedCreds && Date.now() - cachedAt < CACHE_MS) return cachedCreds;
 
-  const accessKeyId = env["aws:accessKeyId"];
-  const secretAccessKey = env["aws:secretAccessKey"];
-  if (!accessKeyId || !secretAccessKey) {
+  const bootstrap = normalizeIamCreds({
+    accessKeyId: readEnvString(env, ["aws:accessKeyId", "AWS_ACCESS_KEY_ID", "accessKeyId"]),
+    secretAccessKey: readEnvString(env, ["aws:secretAccessKey", "AWS_SECRET_ACCESS_KEY", "secretAccessKey"])
+  });
+  if (!bootstrap) {
     const error = new Error("aws:accessKeyId and aws:secretAccessKey must be set on the Glia Function");
     error.name = "ConfigurationError";
     throw error;
   }
 
-  cachedCreds = { accessKeyId, secretAccessKey };
+  const secretId = readEnvString(env, ["APPCONFIG_SECRET_ID"]);
+  let creds = bootstrap;
+  if (secretId) {
+    const region = readEnvString(env, ["AWS_REGION", "region"]) || "us-east-1";
+    const sm = new SecretsManagerClient({ region, credentials: async () => bootstrap });
+    const res = await sm.send(new GetSecretValueCommand({ SecretId: secretId }));
+    const secret = parseSecretString(res.SecretString);
+    creds = normalizeIamCreds(secret);
+    if (!creds) {
+      const error = new Error("APPCONFIG_SECRET_ID resolved, but the secret has no accessKeyId/secretAccessKey or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY");
+      error.name = "ConfigurationError";
+      throw error;
+    }
+  }
+
+  cachedCreds = creds;
   cachedAt = Date.now();
   return cachedCreds;
+}
+
+function readEnvString(env, keys) {
+  if (!env) return "";
+  for (const key of keys) {
+    let value = env[key];
+    if (value && typeof value.then === "function") continue;
+    if (value == null || value === "") continue;
+    if (typeof value === "object" && typeof value.value === "string") value = value.value;
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (trimmed) return trimmed;
+  }
+  return "";
+}
+
+function parseSecretString(raw) {
+  if (!raw) return {};
+  if (isPlainObject(raw)) return raw;
+  if (typeof raw !== "string") return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return isPlainObject(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function normalizeIamCreds(source) {
+  if (typeof source === "string") {
+    try {
+      source = JSON.parse(source);
+    } catch {
+      return null;
+    }
+  }
+  if (!isPlainObject(source)) return null;
+  const accessKeyId = firstString(source, ["accessKeyId", "AWS_ACCESS_KEY_ID", "aws:accessKeyId"]);
+  const secretAccessKey = firstString(source, ["secretAccessKey", "AWS_SECRET_ACCESS_KEY", "aws:secretAccessKey"]);
+  if (!accessKeyId || !secretAccessKey) return null;
+  return { accessKeyId, secretAccessKey };
+}
+
+function firstString(source, keys) {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
 }
 
 async function listAll(client, Command, extra = {}) {
