@@ -10,7 +10,7 @@ const CE_TEST_SITE_ID = 'a5c110f6-a4a5-47d9-bbf1-d03d7a5e5089';
 
 // Paste Glia Function endpoint URLs here after deploy.
 const jiraIssuesUrl = '';
-const applyGvaConfigCredentialsUrl = '';
+const applyGvaConfigCredentialsUrl = 'https://api.glia.com/integrations/dad5ab19-dc04-4fec-a657-d43e18d19e7c/endpoint';
 
 // Per-bot core configuration prefilled into the UI. It doubles as the allow-list
 // the submitted JSON is validated against, so a CE can only change keys that
