@@ -162,6 +162,20 @@
     margin-bottom: 0.5rem;
 }
 
+.bot-name-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: stretch;
+}
+
+.bot-name-row input[type="text"] {
+    flex: 1;
+}
+
+.bot-name-row button {
+    white-space: nowrap;
+}
+
 .form-group input[type="text"],
 .form-group input[type="password"],
 .form-group input[type="email"],
