@@ -7,7 +7,8 @@
     "build": "./node_modules/esbuild/bin/esbuild --bundle --minify --format=esm --outfile=function-out.js --target=es2020 apply_gva_config_credentials.js"
   },
   "dependencies": {
-    "@aws-sdk/client-appconfig": "^3.1065.0"
+    "@aws-sdk/client-appconfig": "^3.1065.0",
+    "@aws-sdk/client-secrets-manager": "^3.1153.0"
   },
   "devDependencies": {
     "esbuild": "^0.27.2"
