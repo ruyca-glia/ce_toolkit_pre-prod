@@ -5,6 +5,7 @@ let finalReport = "";
 let userMail = "support@glia.com";
 let activeTicketKey = "AD-HOC";
 let credentialsTemplate = { secrets: {} };
+let loadedCoreConfig = null;
 
 const writeLogURL = 'https://api.glia.com/integrations/f026a5b6-ba81-4211-99e1-3667bbaf16e9/endpoint';
 const CE_TEST_SITE_ID = 'a5c110f6-a4a5-47d9-bbf1-d03d7a5e5089';
@@ -13,9 +14,9 @@ const CE_TEST_SITE_ID = 'a5c110f6-a4a5-47d9-bbf1-d03d7a5e5089';
 const jiraIssuesUrl = '';
 const applyGvaConfigCredentialsUrl = 'https://api.glia.com/integrations/dad5ab19-dc04-4fec-a657-d43e18d19e7c/endpoint';
 
-// Per-bot core configuration prefilled into the UI. It doubles as the allow-list
-// the submitted JSON is validated against, so a CE can only change keys that
-// already exist, and each value must keep the type it has here.
+// Known core-configuration schema. After Load, this is merged with the bot's
+// live profile so keys that already exist there are allowed, and optional
+// fields like ID types can still be added.
 const CORE_CONFIG_REFERENCE = {
     customerSupport__humanQueue: "",
     allowedSiteIds: [],
@@ -145,6 +146,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('credentialsApproval').addEventListener('change', (e) => {
         document.getElementById('sendCredentialsBtn').disabled = !e.target.checked;
     });
+    resetApprovalChecks();
+    window.addEventListener('pageshow', resetApprovalChecks);
     document.getElementById('sendConfigBtn').addEventListener('click', () => sendCoreConfig({ ticketKey: activeTicketKey }));
     document.getElementById('sendCredentialsBtn').addEventListener('click', () => sendCredentials({ ticketKey: activeTicketKey }));
     document.getElementById('loadBotBtn').addEventListener('click', loadBotFromAppConfig);
@@ -309,6 +312,7 @@ function applyFormPayloadToEditors(formData) {
         const parsed = tryParseJson(coreRaw);
         if (parsed) {
             setCoreConfigText(JSON.stringify(parsed, null, 2));
+            rememberLoadedCoreConfig(parsed);
             loaded = true;
         }
     }
@@ -376,6 +380,7 @@ async function loadBotFromAppConfig() {
         let filled = [];
         if (isPlainObject(loaded.coreConfig)) {
             setCoreConfigText(JSON.stringify(loaded.coreConfig, null, 2));
+            rememberLoadedCoreConfig(loaded.coreConfig);
             syncFeatureControls();
             filled.push(`gva-core (${Object.keys(loaded.coreConfig).length} keys)`);
         } else if (loaded.core?.error) {
@@ -526,6 +531,7 @@ async function runSend({ ticketKey, sendBtn, approvalBox, headerLines, payload, 
                 : 'Updated AppConfig',
             status: 'OK'
         };
+        if (result.warning) logOutput(`WARNING: ${result.warning}`);
         if (result.result) {
             logOutput(`   -> version=${result.result.versionNumber ?? '-'} deployment=${result.result.deploymentNumber ?? '-'} state=${result.result.state ?? '-'}`);
         }
@@ -562,11 +568,11 @@ function validateCoreConfig(coreConfig) {
         return 'Core configuration is empty. Add only the keys you want to change.';
     }
 
-    const issues = collectCoreConfigIssues(coreConfig, CORE_CONFIG_REFERENCE);
+    const issues = collectCoreConfigIssues(coreConfig, coreConfigAllowList());
     if (issues.length) {
         const shown = issues.slice(0, 12).map((issue) => `  - ${issue}`);
         if (issues.length > shown.length) shown.push(`  …and ${issues.length - shown.length} more`);
-        return ['Core configuration rejected. Existing keys can be altered, nothing new can be added:', ...shown].join('\n');
+        return ['Core configuration rejected. Keys from this bot can be changed; unknown extra keys are rejected:', ...shown].join('\n');
     }
 
     const firstIdType = getConfigValue(coreConfig, 'bankIntegration.bankAuth.otpIdentifiers.firstIdType');
@@ -576,6 +582,19 @@ function validateCoreConfig(coreConfig) {
     }
 
     return null;
+}
+
+function resetApprovalChecks() {
+    [
+        ['configApproval', 'sendConfigBtn'],
+        ['credentialsApproval', 'sendCredentialsBtn']
+    ].forEach(([boxId, buttonId]) => {
+        const box = document.getElementById(boxId);
+        const button = document.getElementById(buttonId);
+        if (!box || !button) return;
+        box.checked = false;
+        button.disabled = true;
+    });
 }
 
 function readBotName() {
@@ -734,6 +753,25 @@ function renderCoreConfigHighlight() {
 
 function setCoreConfigText(text) {
     setJsonEditorText(CORE_CONFIG_EDITOR, text);
+}
+
+function rememberLoadedCoreConfig(config) {
+    loadedCoreConfig = isPlainObject(config) ? clonePlain(config) : null;
+}
+
+function coreConfigAllowList() {
+    return loadedCoreConfig ? deepMerge(CORE_CONFIG_REFERENCE, loadedCoreConfig) : CORE_CONFIG_REFERENCE;
+}
+
+function deepMerge(base, patch) {
+    if (!isPlainObject(base) || !isPlainObject(patch)) return patch;
+    const out = { ...base };
+    Object.keys(patch).forEach((key) => {
+        out[key] = isPlainObject(base[key]) && isPlainObject(patch[key])
+            ? deepMerge(base[key], patch[key])
+            : patch[key];
+    });
+    return out;
 }
 
 function clonePlain(value) {

@@ -132,29 +132,41 @@ export async function onInvoke(request, env) {
     }));
     log(`created hosted version ${version.VersionNumber}`);
 
-    const strategy = env.APPCONFIG_DEPLOYMENT_STRATEGY_ID || "AppConfig.AllAtOnce";
+    const strategy = readEnvString(env, ["APPCONFIG_DEPLOYMENT_STRATEGY_ID"]) || "w4rmfp0";
     log(`StartDeployment strategy=${strategy}`);
-    const deployment = await appconfig.send(new StartDeploymentCommand({
-      ApplicationId: application.Id,
-      EnvironmentId: environment.Id,
-      ConfigurationProfileId: profile.Id,
-      ConfigurationVersion: String(version.VersionNumber),
-      DeploymentStrategyId: strategy
-    }));
-    log(`deployment ${deployment.DeploymentNumber} state=${deployment.State || "started"}`);
+    let deployment = null;
+    let deployWarning = null;
+    try {
+      deployment = await appconfig.send(new StartDeploymentCommand({
+        ApplicationId: application.Id,
+        EnvironmentId: environment.Id,
+        ConfigurationProfileId: profile.Id,
+        ConfigurationVersion: String(version.VersionNumber),
+        DeploymentStrategyId: strategy
+      }));
+      log(`deployment ${deployment.DeploymentNumber} state=${deployment.State || "started"}`);
+    } catch (error) {
+      deployWarning = `${error.name || "Error"}: ${shortError(error)}`;
+      log(`StartDeployment failed after creating hosted version ${version.VersionNumber}: ${deployWarning}`);
+      if (error.name !== "AccessDeniedException") throw error;
+    }
 
     const result = {
       application: application.Name,
       environment: environment.Name,
       profile: profile.Name,
       versionNumber: version.VersionNumber,
-      deploymentNumber: deployment.DeploymentNumber,
-      state: deployment.State
+      deploymentNumber: deployment?.DeploymentNumber,
+      state: deployment?.State || (deployWarning ? "hosted-only" : "started"),
+      deployed: Boolean(deployment)
     };
 
     log(`done ${JSON.stringify(result)}`);
     return Response.json({
       success: true,
+      warning: deployWarning
+        ? `Saved hosted version ${version.VersionNumber}, but it was not deployed. ${deployWarning} Set APPCONFIG_DEPLOYMENT_STRATEGY_ID to a strategy this IAM user can use, or allow appconfig:StartDeployment on deploymentstrategy/*.`
+        : undefined,
       result,
       durationMs: Date.now() - started,
       summary: {
@@ -162,13 +174,15 @@ export async function onInvoke(request, env) {
         action: coreConfig
           ? `Updated ${application.Name} profile ${profile.Name}`
           : `Updated ${application.Name} credentials profile ${profile.Name}`,
-        status: "OK",
+        status: deployWarning ? "Saved, not deployed" : "OK",
         logs: [
           `Application ${application.Name}`,
           `Profile ${profile.Name}`,
           `Environment ${environment.Name}`,
           `Hosted version ${version.VersionNumber}`,
-          `Deployment ${deployment.DeploymentNumber} (${deployment.State || "started"})`
+          deployment
+            ? `Deployment ${deployment.DeploymentNumber} (${deployment.State || "started"})`
+            : `Not deployed: ${deployWarning}`
         ]
       }
     });
