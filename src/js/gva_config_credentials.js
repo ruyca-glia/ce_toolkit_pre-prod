@@ -13,6 +13,8 @@ const CE_TEST_SITE_ID = 'a5c110f6-a4a5-47d9-bbf1-d03d7a5e5089';
 // Paste Glia Function endpoint URLs here after deploy.
 const jiraIssuesUrl = '';
 const applyGvaConfigCredentialsUrl = 'https://api.glia.com/integrations/dad5ab19-dc04-4fec-a657-d43e18d19e7c/endpoint';
+const OPERATOR_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const GLIA_TOKEN_URL = 'https://api.glia.com/operator_authentication/tokens';
 
 // Known core-configuration schema. After Load, this is merged with the bot's
 // live profile so keys that already exist there are allowed, and optional
@@ -150,6 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('pageshow', resetApprovalChecks);
     document.getElementById('sendConfigBtn').addEventListener('click', () => sendCoreConfig({ ticketKey: activeTicketKey }));
     document.getElementById('sendCredentialsBtn').addEventListener('click', () => sendCredentials({ ticketKey: activeTicketKey }));
+    document.getElementById('generateApiKeyBtn').addEventListener('click', generateApiKey);
     document.getElementById('loadBotBtn').addEventListener('click', loadBotFromAppConfig);
     document.getElementById('botNameInput').addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
@@ -452,6 +455,105 @@ async function sendCoreConfig({ ticketKey, button, approval }) {
         payload: { operation: 'update', issueKey: ticketKey, botName, coreConfig },
         action: 'Update gva-core config'
     });
+}
+
+function generateApiKeyUrl(operatorId) {
+    return `https://api.glia.com/operators/${encodeURIComponent(operatorId)}/api_keys`;
+}
+
+function redactSecret(text, secret) {
+    const value = String(secret || '');
+    if (!value) return String(text || '');
+    return String(text || '').split(value).join('[redacted]');
+}
+
+async function readJsonResponse(res) {
+    const rawBody = await res.text();
+    try {
+        return { rawBody, body: rawBody ? JSON.parse(rawBody) : {} };
+    } catch (error) {
+        return { rawBody, body: {} };
+    }
+}
+
+async function bearerFromApiToken(apiToken) {
+    const res = await fetch(GLIA_TOKEN_URL, {
+        method: 'POST',
+        headers: {
+            Accept: 'application/vnd.salemove.v1+json',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ api_token: apiToken })
+    });
+    const { rawBody, body } = await readJsonResponse(res);
+    if (!res.ok) {
+        const message = body.message || body.error || rawBody.slice(0, 300) || res.statusText;
+        throw new Error(`API token was rejected (HTTP ${res.status}): ${redactSecret(message, apiToken)}`);
+    }
+    const bearer = body.token || body.access_token || body.bearer;
+    if (!bearer) throw new Error('API token exchange returned no bearer token.');
+    return bearer;
+}
+
+async function generateApiKey() {
+    const button = document.getElementById('generateApiKeyBtn');
+    const operatorId = document.getElementById('operatorIdInput').value.trim();
+    const apiToken = document.getElementById('apiTokenInput').value.trim();
+    if (!apiToken) {
+        logOutput('API token is required. Paste the Glia Support API token.', true);
+        setStatus('Missing API token');
+        return;
+    }
+    if (!OPERATOR_ID_PATTERN.test(operatorId)) {
+        logOutput('Operator ID is required. Paste the GVA operator UUID from Virtual Assistants.', true);
+        setStatus('Missing operator ID');
+        return;
+    }
+
+    const url = generateApiKeyUrl(operatorId);
+    const originalLabel = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = 'Generating…';
+    setStatus('Generating API key');
+    logOutput('========================================', true);
+    logOutput('GENERATING API KEY');
+    logOutput(`Operator: ${operatorId}`);
+    logOutput('API token: set');
+    logOutput(`POST ${url}`);
+    logOutput('========================================\n');
+
+    try {
+        const bearer = await bearerFromApiToken(apiToken);
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/vnd.salemove.v1+json',
+                Authorization: `Bearer ${bearer}`
+            }
+        });
+        const { rawBody, body } = await readJsonResponse(res);
+        if (!res.ok) {
+            const message = body.message || body.error || rawBody.slice(0, 300) || res.statusText;
+            throw new Error(`Generate API key failed (HTTP ${res.status}): ${redactSecret(redactSecret(message, apiToken), bearer)}`);
+        }
+        const apiKeyId = body.id || body.api_key_id;
+        const apiKeySecret = body.secret || body.api_key_secret;
+        if (!apiKeyId || !apiKeySecret) {
+            throw new Error('Generate API key returned no id or secret.');
+        }
+        const credentials = readCredentials();
+        credentials.secrets.api_key_id = apiKeyId;
+        credentials.secrets.api_key_secret = apiKeySecret;
+        setCredentials(credentials);
+        logOutput(`Generated API key ${String(apiKeyId).slice(0, 5)}… secret=set (${String(apiKeySecret).length} chars).`);
+        setStatus('API key generated');
+    } catch (error) {
+        logOutput(`FAILED: ${redactSecret(error.message, apiToken)}`);
+        setStatus('Failed');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalLabel;
+    }
 }
 
 async function sendCredentials({ ticketKey, button, approval }) {
