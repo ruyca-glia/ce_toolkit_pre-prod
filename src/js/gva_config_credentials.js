@@ -4,6 +4,8 @@ let latestIssues = [];
 let finalReport = "";
 let userMail = "support@glia.com";
 let activeTicketKey = "AD-HOC";
+let credentialsTemplate = { secrets: {} };
+let loadedCoreConfig = null;
 
 const writeLogURL = 'https://api.glia.com/integrations/f026a5b6-ba81-4211-99e1-3667bbaf16e9/endpoint';
 const CE_TEST_SITE_ID = 'a5c110f6-a4a5-47d9-bbf1-d03d7a5e5089';
@@ -11,10 +13,12 @@ const CE_TEST_SITE_ID = 'a5c110f6-a4a5-47d9-bbf1-d03d7a5e5089';
 // Paste Glia Function endpoint URLs here after deploy.
 const jiraIssuesUrl = '';
 const applyGvaConfigCredentialsUrl = 'https://api.glia.com/integrations/dad5ab19-dc04-4fec-a657-d43e18d19e7c/endpoint';
+const OPERATOR_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const GLIA_TOKEN_URL = 'https://api.glia.com/operator_authentication/tokens';
 
-// Per-bot core configuration prefilled into the UI. It doubles as the allow-list
-// the submitted JSON is validated against, so a CE can only change keys that
-// already exist, and each value must keep the type it has here.
+// Known core-configuration schema. After Load, this is merged with the bot's
+// live profile so keys that already exist there are allowed, and optional
+// fields like ID types can still be added.
 const CORE_CONFIG_REFERENCE = {
     customerSupport__humanQueue: "",
     allowedSiteIds: [],
@@ -112,20 +116,10 @@ const CORE_CONFIG_REFERENCE = {
 
 // Keys the reference allows but that stay out of the payload until a CE picks a
 // value, so an unused optional setting is never sent as an empty string.
-const OPTIONAL_CORE_CONFIG_PATHS = ['bankIntegration.bankAuth.otpIdentifiers.secondIdType'];
-
-const DEFAULT_CREDENTIALS = {
-    secrets: {
-        api_key_id: "",
-        api_key_secret: ""
-    }
-};
-
-function coreConfigDefault() {
-    const config = JSON.parse(JSON.stringify(CORE_CONFIG_REFERENCE));
-    OPTIONAL_CORE_CONFIG_PATHS.forEach((path) => deleteConfigValue(config, path));
-    return config;
-}
+const OPTIONAL_CORE_CONFIG_PATHS = [
+    'bankIntegration.bankAuth.otpIdentifiers.firstIdType',
+    'bankIntegration.bankAuth.otpIdentifiers.secondIdType'
+];
 
 function extractEmails(text) {
     if (!text) return [];
@@ -134,8 +128,8 @@ function extractEmails(text) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    setCoreConfigText(JSON.stringify(coreConfigDefault(), null, 2));
-    setCredentialsText(JSON.stringify(DEFAULT_CREDENTIALS, null, 2));
+    setCoreConfigText('');
+    setCredentials({});
 
     bindJsonEditor(CORE_CONFIG_EDITOR, {
         onInput: () => {
@@ -144,7 +138,6 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         onFormat: syncFeatureControls
     });
-    bindJsonEditor(CREDENTIALS_EDITOR);
     initFeatureControls();
     initThemeToggle();
     document.getElementById('coreConfigExpand').addEventListener('click', toggleCoreConfigExpanded);
@@ -155,8 +148,18 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('credentialsApproval').addEventListener('change', (e) => {
         document.getElementById('sendCredentialsBtn').disabled = !e.target.checked;
     });
+    resetApprovalChecks();
+    window.addEventListener('pageshow', resetApprovalChecks);
     document.getElementById('sendConfigBtn').addEventListener('click', () => sendCoreConfig({ ticketKey: activeTicketKey }));
     document.getElementById('sendCredentialsBtn').addEventListener('click', () => sendCredentials({ ticketKey: activeTicketKey }));
+    document.getElementById('generateApiKeyBtn').addEventListener('click', generateApiKey);
+    document.getElementById('loadBotBtn').addEventListener('click', loadBotFromAppConfig);
+    document.getElementById('botNameInput').addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            loadBotFromAppConfig();
+        }
+    });
     document.getElementById('clear-output').addEventListener('click', () => {
         logOutput('Waiting for script execution. Confirm a payload and click its Send button to begin.', true);
         setStatus('Ready');
@@ -312,13 +315,14 @@ function applyFormPayloadToEditors(formData) {
         const parsed = tryParseJson(coreRaw);
         if (parsed) {
             setCoreConfigText(JSON.stringify(parsed, null, 2));
+            rememberLoadedCoreConfig(parsed);
             loaded = true;
         }
     }
     if (credsRaw) {
         const parsed = tryParseJson(credsRaw);
         if (parsed) {
-            setCredentialsText(JSON.stringify(parsed, null, 2));
+            setCredentials(parsed);
             loaded = true;
         }
     }
@@ -339,16 +343,83 @@ function tryParseJson(value) {
     try { return JSON.parse(value); } catch (e) { return null; }
 }
 
+async function loadBotFromAppConfig() {
+    const botName = readBotName();
+    const loadBtn = document.getElementById('loadBotBtn');
+    if (!botName) {
+        logOutput('Enter a bot name first. It must match the AppConfig configuration profile.', true);
+        setStatus('Missing bot name');
+        return;
+    }
+    if (!applyGvaConfigCredentialsUrl) {
+        logOutput('ApplyGvaConfigCredentials URL is not set. Deploy the Glia Function and paste its endpoint here.', true);
+        setStatus('Missing function URL');
+        return;
+    }
+
+    const originalLabel = loadBtn.innerHTML;
+    loadBtn.disabled = true;
+    loadBtn.innerHTML = 'Loading…';
+    setStatus('Loading');
+    logOutput('========================================', true);
+    logOutput(`LOADING BOT FROM APPCONFIG`);
+    logOutput(`Bot: ${botName}`);
+    logOutput('========================================\n');
+
+    try {
+        const headers = await getGliaHeaders();
+        const res = await fetch(applyGvaConfigCredentialsUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ operation: 'get', botName })
+        });
+        const rawBody = await res.text();
+        const result = readFunctionResult(rawBody);
+        if (!result.success) {
+            throw new Error(functionFailureMessage(result, res.status, rawBody));
+        }
+
+        const loaded = result.result || {};
+        let filled = [];
+        if (isPlainObject(loaded.coreConfig)) {
+            setCoreConfigText(JSON.stringify(loaded.coreConfig, null, 2));
+            rememberLoadedCoreConfig(loaded.coreConfig);
+            syncFeatureControls();
+            filled.push(`gva-core (${Object.keys(loaded.coreConfig).length} keys)`);
+        } else if (loaded.core?.error) {
+            logOutput(`Core configuration not loaded: ${loaded.core.error}`);
+        }
+        if (isPlainObject(loaded.credentials)) {
+            setCredentials(loaded.credentials);
+            filled.push('gva-chat-adapter credentials');
+        } else if (loaded.credentialsMeta?.error) {
+            logOutput(`Credentials not loaded: ${loaded.credentialsMeta.error}`);
+        }
+
+        if (!filled.length) {
+            throw new Error(`No configuration found for bot "${botName}".`);
+        }
+        logOutput(`Loaded ${filled.join(' and ')} for ${botName}.`);
+        setStatus('Loaded');
+    } catch (error) {
+        logOutput(`FAILED: ${error.message}`);
+        setStatus('Failed');
+    } finally {
+        loadBtn.disabled = false;
+        loadBtn.innerHTML = originalLabel;
+    }
+}
+
 async function sendCoreConfig({ ticketKey, button, approval }) {
     const sendBtn = button || document.getElementById('sendConfigBtn');
     const approvalBox = approval || document.getElementById('configApproval');
     let coreConfig;
 
     try {
-        coreConfig = JSON.parse(document.getElementById('coreConfigInput').value);
+        coreConfig = parseEditorJson('coreConfigInput', 'Core configuration is empty. Load a bot first.');
     } catch (error) {
         showCoreConfigError();
-        logOutput(`Core configuration JSON parse error: ${error.message}`, true);
+        logOutput(error.message.startsWith('Core configuration') ? error.message : `Core configuration JSON parse error: ${error.message}`, true);
         setStatus('Invalid JSON');
         return;
     }
@@ -378,26 +449,117 @@ async function sendCoreConfig({ ticketKey, button, approval }) {
             'STARTING CORE CONFIGURATION SEND',
             `Ticket: ${ticketKey}`,
             `Bot: ${botName}`,
-            'Application: gva-chat-adapter',
+            'Application: gva-core',
             `Core configuration keys: ${keyPaths.length}`
         ],
         payload: { operation: 'update', issueKey: ticketKey, botName, coreConfig },
-        action: 'Update gva-chat-adapter config'
+        action: 'Update gva-core config'
     });
+}
+
+function generateApiKeyUrl(operatorId) {
+    return `https://api.glia.com/operators/${encodeURIComponent(operatorId)}/api_keys`;
+}
+
+function redactSecret(text, secret) {
+    const value = String(secret || '');
+    if (!value) return String(text || '');
+    return String(text || '').split(value).join('[redacted]');
+}
+
+async function readJsonResponse(res) {
+    const rawBody = await res.text();
+    try {
+        return { rawBody, body: rawBody ? JSON.parse(rawBody) : {} };
+    } catch (error) {
+        return { rawBody, body: {} };
+    }
+}
+
+async function bearerFromApiToken(apiToken) {
+    const res = await fetch(GLIA_TOKEN_URL, {
+        method: 'POST',
+        headers: {
+            Accept: 'application/vnd.salemove.v1+json',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ api_token: apiToken })
+    });
+    const { rawBody, body } = await readJsonResponse(res);
+    if (!res.ok) {
+        const message = body.message || body.error || rawBody.slice(0, 300) || res.statusText;
+        throw new Error(`API token was rejected (HTTP ${res.status}): ${redactSecret(message, apiToken)}`);
+    }
+    const bearer = body.token || body.access_token || body.bearer;
+    if (!bearer) throw new Error('API token exchange returned no bearer token.');
+    return bearer;
+}
+
+async function generateApiKey() {
+    const button = document.getElementById('generateApiKeyBtn');
+    const operatorId = document.getElementById('operatorIdInput').value.trim();
+    const apiToken = document.getElementById('apiTokenInput').value.trim();
+    if (!apiToken) {
+        logOutput('API token is required. Paste the Glia Support API token.', true);
+        setStatus('Missing API token');
+        return;
+    }
+    if (!OPERATOR_ID_PATTERN.test(operatorId)) {
+        logOutput('Operator ID is required. Paste the GVA operator UUID from Virtual Assistants.', true);
+        setStatus('Missing operator ID');
+        return;
+    }
+
+    const url = generateApiKeyUrl(operatorId);
+    const originalLabel = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = 'Generating…';
+    setStatus('Generating API key');
+    logOutput('========================================', true);
+    logOutput('GENERATING API KEY');
+    logOutput(`Operator: ${operatorId}`);
+    logOutput('API token: set');
+    logOutput(`POST ${url}`);
+    logOutput('========================================\n');
+
+    try {
+        const bearer = await bearerFromApiToken(apiToken);
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/vnd.salemove.v1+json',
+                Authorization: `Bearer ${bearer}`
+            }
+        });
+        const { rawBody, body } = await readJsonResponse(res);
+        if (!res.ok) {
+            const message = body.message || body.error || rawBody.slice(0, 300) || res.statusText;
+            throw new Error(`Generate API key failed (HTTP ${res.status}): ${redactSecret(redactSecret(message, apiToken), bearer)}`);
+        }
+        const apiKeyId = body.id || body.api_key_id;
+        const apiKeySecret = body.secret || body.api_key_secret;
+        if (!apiKeyId || !apiKeySecret) {
+            throw new Error('Generate API key returned no id or secret.');
+        }
+        const credentials = readCredentials();
+        credentials.secrets.api_key_id = apiKeyId;
+        credentials.secrets.api_key_secret = apiKeySecret;
+        setCredentials(credentials);
+        logOutput(`Generated API key ${String(apiKeyId).slice(0, 5)}… secret=set (${String(apiKeySecret).length} chars).`);
+        setStatus('API key generated');
+    } catch (error) {
+        logOutput(`FAILED: ${redactSecret(error.message, apiToken)}`);
+        setStatus('Failed');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalLabel;
+    }
 }
 
 async function sendCredentials({ ticketKey, button, approval }) {
     const sendBtn = button || document.getElementById('sendCredentialsBtn');
     const approvalBox = approval || document.getElementById('credentialsApproval');
-    let credentials;
-
-    try {
-        credentials = JSON.parse(document.getElementById('credentialsInput').value);
-    } catch (error) {
-        logOutput(`Credentials JSON parse error: ${error.message}`, true);
-        setStatus('Invalid JSON');
-        return;
-    }
+    const credentials = readCredentials();
 
     const credentialsError = validateCredentials(credentials);
     if (credentialsError) {
@@ -421,11 +583,11 @@ async function sendCredentials({ ticketKey, button, approval }) {
             'STARTING CREDENTIALS SEND',
             `Ticket: ${ticketKey}`,
             `Bot: ${botName}`,
-            'Application: gva-core',
+            'Application: gva-chat-adapter',
             `Credentials: ${JSON.stringify(redactCredentials(credentials))}`
         ],
         payload: { operation: 'update', issueKey: ticketKey, botName, credentials },
-        action: 'Update gva-core credentials'
+        action: 'Update gva-chat-adapter credentials'
     });
 }
 
@@ -458,8 +620,11 @@ async function runSend({ ticketKey, sendBtn, approvalBox, headerLines, payload, 
             headers,
             body: JSON.stringify(payload)
         });
-        result = await res.json();
-        if (!result.success) throw new Error(result.error || 'Glia Function returned success: false');
+        const rawBody = await res.text();
+        result = readFunctionResult(rawBody);
+        if (!result.success) {
+            throw new Error(functionFailureMessage(result, res.status, rawBody));
+        }
 
         const summary = result.summary || {
             item: ticketKey,
@@ -468,6 +633,7 @@ async function runSend({ ticketKey, sendBtn, approvalBox, headerLines, payload, 
                 : 'Updated AppConfig',
             status: 'OK'
         };
+        if (result.warning) logOutput(`WARNING: ${result.warning}`);
         if (result.result) {
             logOutput(`   -> version=${result.result.versionNumber ?? '-'} deployment=${result.result.deploymentNumber ?? '-'} state=${result.result.state ?? '-'}`);
         }
@@ -504,11 +670,11 @@ function validateCoreConfig(coreConfig) {
         return 'Core configuration is empty. Add only the keys you want to change.';
     }
 
-    const issues = collectCoreConfigIssues(coreConfig, CORE_CONFIG_REFERENCE);
+    const issues = collectCoreConfigIssues(coreConfig, coreConfigAllowList());
     if (issues.length) {
         const shown = issues.slice(0, 12).map((issue) => `  - ${issue}`);
         if (issues.length > shown.length) shown.push(`  …and ${issues.length - shown.length} more`);
-        return ['Core configuration rejected. Existing keys can be altered, nothing new can be added:', ...shown].join('\n');
+        return ['Core configuration rejected. Keys from this bot can be changed; unknown extra keys are rejected:', ...shown].join('\n');
     }
 
     const firstIdType = getConfigValue(coreConfig, 'bankIntegration.bankAuth.otpIdentifiers.firstIdType');
@@ -520,16 +686,31 @@ function validateCoreConfig(coreConfig) {
     return null;
 }
 
+function resetApprovalChecks() {
+    [
+        ['configApproval', 'sendConfigBtn'],
+        ['credentialsApproval', 'sendCredentialsBtn']
+    ].forEach(([boxId, buttonId]) => {
+        const box = document.getElementById(boxId);
+        const button = document.getElementById(buttonId);
+        if (!box || !button) return;
+        box.checked = false;
+        button.disabled = true;
+    });
+}
+
 function readBotName() {
     return document.getElementById('botNameInput').value.trim();
 }
 
 function validateCredentials(credentials) {
-    if (!credentials || !credentials.secrets) {
-        return 'Credentials must follow { "secrets": { "api_key_id": "", "api_key_secret": "" } }.';
+    const id = credentials?.secrets?.api_key_id;
+    const secret = credentials?.secrets?.api_key_secret;
+    if (!id && !secret) {
+        return 'Credentials are empty. Load a bot first or paste an API key ID and secret.';
     }
-    if (!('api_key_id' in credentials.secrets) || !('api_key_secret' in credentials.secrets)) {
-        return 'credentials.secrets must include api_key_id and api_key_secret.';
+    if (!id || !secret) {
+        return 'Both API key ID and API key secret are required.';
     }
     return null;
 }
@@ -621,7 +802,6 @@ function highlightJson(text) {
 }
 
 const CORE_CONFIG_EDITOR = { inputId: 'coreConfigInput', highlightId: 'coreConfigHighlight' };
-const CREDENTIALS_EDITOR = { inputId: 'credentialsInput', highlightId: 'credentialsHighlight' };
 
 function bindJsonEditor(editor, { onInput, onFormat } = {}) {
     const input = document.getElementById(editor.inputId);
@@ -677,8 +857,42 @@ function setCoreConfigText(text) {
     setJsonEditorText(CORE_CONFIG_EDITOR, text);
 }
 
-function setCredentialsText(text) {
-    setJsonEditorText(CREDENTIALS_EDITOR, text);
+function rememberLoadedCoreConfig(config) {
+    loadedCoreConfig = isPlainObject(config) ? clonePlain(config) : null;
+}
+
+function coreConfigAllowList() {
+    return loadedCoreConfig ? deepMerge(CORE_CONFIG_REFERENCE, loadedCoreConfig) : CORE_CONFIG_REFERENCE;
+}
+
+function deepMerge(base, patch) {
+    if (!isPlainObject(base) || !isPlainObject(patch)) return patch;
+    const out = { ...base };
+    Object.keys(patch).forEach((key) => {
+        out[key] = isPlainObject(base[key]) && isPlainObject(patch[key])
+            ? deepMerge(base[key], patch[key])
+            : patch[key];
+    });
+    return out;
+}
+
+function clonePlain(value) {
+    return isPlainObject(value) ? JSON.parse(JSON.stringify(value)) : {};
+}
+
+function setCredentials(credentials) {
+    credentialsTemplate = clonePlain(credentials);
+    if (!isPlainObject(credentialsTemplate.secrets)) credentialsTemplate.secrets = {};
+    document.getElementById('apiKeyIdInput').value = credentialsTemplate.secrets.api_key_id || '';
+    document.getElementById('apiKeySecretInput').value = credentialsTemplate.secrets.api_key_secret || '';
+}
+
+function readCredentials() {
+    const credentials = clonePlain(credentialsTemplate);
+    if (!isPlainObject(credentials.secrets)) credentials.secrets = {};
+    credentials.secrets.api_key_id = document.getElementById('apiKeyIdInput').value;
+    credentials.secrets.api_key_secret = document.getElementById('apiKeySecretInput').value;
+    return credentials;
 }
 
 function initFeatureControls() {
@@ -692,16 +906,26 @@ function controlValue(control) {
     return control.type === 'checkbox' ? control.checked : control.value;
 }
 
+function parseEditorJson(inputId, emptyMessage) {
+    const raw = document.getElementById(inputId).value.trim();
+    if (!raw) {
+        const error = new Error(emptyMessage);
+        throw error;
+    }
+    return JSON.parse(raw);
+}
+
 function writeControlToConfig(control) {
     const path = control.dataset.configPath;
     let config;
 
     try {
-        config = JSON.parse(document.getElementById('coreConfigInput').value);
+        config = parseEditorJson('coreConfigInput', 'Load a bot before using these controls.');
     } catch (error) {
         showCoreConfigError();
-        logOutput(`Core configuration JSON parse error: ${error.message}`, true);
+        logOutput(error.message, true);
         setStatus('Invalid JSON');
+        syncFeatureControls();
         return;
     }
 
@@ -710,7 +934,7 @@ function writeControlToConfig(control) {
     const applied = omit ? deleteConfigValue(config, path) : setConfigValue(config, path, value);
 
     if (!applied) {
-        logOutput(`${path} is missing from the core configuration, so the control was not applied.`, true);
+        logOutput(`${path} cannot be added to this core configuration.`, true);
         syncFeatureControls();
         return;
     }
@@ -727,8 +951,16 @@ function syncFeatureControls() {
     let config;
 
     try {
-        config = JSON.parse(document.getElementById('coreConfigInput').value);
+        config = parseEditorJson('coreConfigInput', 'empty');
     } catch (error) {
+        document.querySelectorAll('[data-config-path]').forEach((control) => {
+            if (control.type === 'checkbox') {
+                control.indeterminate = true;
+                control.checked = false;
+            } else {
+                control.value = '';
+            }
+        });
         return;
     }
 
@@ -752,8 +984,8 @@ function getConfigValue(config, path) {
 function setConfigValue(config, path, value) {
     const keys = path.split('.');
     const lastKey = keys.pop();
-    const parent = configParent(config, keys);
-    if (!parent) return false;
+    const parent = ensureConfigParent(config, keys);
+    if (!parent || !referenceAllowsPath(path)) return false;
     parent[lastKey] = value;
     return true;
 }
@@ -762,7 +994,7 @@ function deleteConfigValue(config, path) {
     const keys = path.split('.');
     const lastKey = keys.pop();
     const parent = configParent(config, keys);
-    if (!parent) return false;
+    if (!parent) return true;
     delete parent[lastKey];
     return true;
 }
@@ -770,6 +1002,26 @@ function deleteConfigValue(config, path) {
 function configParent(config, keys) {
     const parent = keys.reduce((node, key) => (isPlainObject(node) ? node[key] : undefined), config);
     return isPlainObject(parent) ? parent : null;
+}
+
+function ensureConfigParent(config, keys) {
+    let node = config;
+    let reference = CORE_CONFIG_REFERENCE;
+    for (const key of keys) {
+        if (!isPlainObject(reference) || !Object.prototype.hasOwnProperty.call(reference, key) || !isPlainObject(reference[key])) {
+            return null;
+        }
+        if (!isPlainObject(node[key])) node[key] = {};
+        node = node[key];
+        reference = reference[key];
+    }
+    return isPlainObject(node) ? node : null;
+}
+
+function referenceAllowsPath(path) {
+    return path.split('.').reduce((node, key) => (
+        isPlainObject(node) && Object.prototype.hasOwnProperty.call(node, key) ? node[key] : undefined
+    ), CORE_CONFIG_REFERENCE) !== undefined;
 }
 
 // The two identifiers have to differ, so each dropdown greys out whatever the
@@ -813,6 +1065,30 @@ function toggleCoreConfigCollapsed() {
 
 function isPlainObject(value) {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readFunctionResult(raw) {
+    let value = raw;
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) return { success: false, error: 'Empty function response' };
+        try {
+            value = JSON.parse(trimmed);
+        } catch {
+            return { success: false, error: trimmed.slice(0, 500) };
+        }
+    }
+    if (!isPlainObject(value)) return { success: false, error: String(raw) };
+    if (typeof value.errorMessage === 'string') return readFunctionResult(value.errorMessage);
+    if ('payload' in value && !('success' in value)) return readFunctionResult(value.payload);
+    return value;
+}
+
+function functionFailureMessage(result, httpStatus, rawBody) {
+    const err = result.error || result.message;
+    if (err) return String(err);
+    const snippet = String(rawBody || JSON.stringify(result) || '').slice(0, 500);
+    return `Glia Function returned success: false (HTTP ${httpStatus}): ${snippet}`;
 }
 
 function describeType(value) {

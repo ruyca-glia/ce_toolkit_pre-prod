@@ -37,3 +37,6 @@ src/js/glia-functions/Jira/.DS_Store
 
 # Dependencies (install with npm ci from package-lock.json)
 node_modules/
+
+# Local-only GVA test harness. Never commit.
+local-gva/
