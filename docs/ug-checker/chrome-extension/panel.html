@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CMS Knowledge Bank Tools</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="mark" aria-hidden="true"></div>
+      <div>
+        <p class="kicker">CMS</p>
+        <h1>Knowledge Bank</h1>
+      </div>
+    </header>
+
+    <form id="settings" autocomplete="off">
+      <label>
+        Bearer token
+        <span class="token-row">
+          <input
+            id="bearer-token"
+            name="bearer_token"
+            type="password"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="Paste bearer token"
+            required
+          />
+          <button id="toggle-token" type="button" class="ghost">Show</button>
+        </span>
+      </label>
+
+      <label>
+        User goal ID
+        <input
+          id="response-id"
+          name="response_id"
+          type="text"
+          spellcheck="false"
+          placeholder="874424"
+        />
+      </label>
+
+      <label>
+        Response ID
+        <input
+          id="user-goal-id"
+          name="user_goal_id"
+          type="text"
+          spellcheck="false"
+          placeholder="329389"
+        />
+      </label>
+    </form>
+
+    <div class="actions">
+      <button id="fetch-goal" type="button" class="primary">Fetch</button>
+      <button id="responses" type="button">Responses</button>
+    </div>
+
+    <p id="status" class="status" role="status"></p>
+
+    <section class="results" aria-live="polite">
+      <div class="results-bar">
+        <h2>Response</h2>
+        <div class="results-actions">
+          <button id="copy" type="button" class="ghost" disabled>Copy</button>
+          <button id="clear" type="button" class="ghost" disabled>Clear</button>
+        </div>
+      </div>
+      <div id="output">
+        <p class="empty">Run a request to see the GraphQL response.</p>
+      </div>
+    </section>
+
+    <script src="panel.js"></script>
+  </body>
+</html>

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UG Checker · CE Toolkit</title>
+    <link rel="stylesheet" href="./css/ug-checker.css" />
+  </head>
+  <body>
+    <header class="top">
+      <a class="back" href="../index.html">← Toolkit</a>
+      <div>
+        <p class="kicker">CE Toolkit</p>
+        <h1>UG Checker</h1>
+        <p class="lede">
+          Look up Knowledge Bank responses and user-goal button routing for your open tickets.
+        </p>
+      </div>
+    </header>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Your open tickets</h2>
+        <button id="refresh-tickets" type="button" class="ghost">Refresh</button>
+      </div>
+      <p id="ticket-status" class="status" role="status">Loading tickets…</p>
+      <div class="table-wrap">
+        <table id="ticket-table">
+          <thead>
+            <tr>
+              <th>Ticket</th>
+              <th>Summary</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="ticket-rows">
+            <tr>
+              <td colspan="4" class="empty">No tickets loaded.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="detail-panel" class="panel hidden">
+      <h2 id="detail-title">Ticket</h2>
+      <div id="ticket-fields" class="fields"></div>
+
+      <label class="verify">
+        <input id="verify-check" type="checkbox" />
+        I verified the User goal ID and Response ID for this ticket.
+      </label>
+
+      <div class="actions">
+        <button id="run-fetch" type="button" class="primary" disabled>Fetch</button>
+        <button id="run-responses" type="button" disabled>Responses</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Console</h2>
+        <span id="run-status" class="badge badge-info">Ready</span>
+      </div>
+      <pre id="console" class="output-console" aria-live="polite">Waiting…</pre>
+      <div id="summary-wrap" class="hidden">
+        <h3>Summary</h3>
+        <div class="table-wrap">
+          <table id="summary-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Action</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="summary-rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <script src="./js/ug-checker.js"></script>
+  </body>
+</html>

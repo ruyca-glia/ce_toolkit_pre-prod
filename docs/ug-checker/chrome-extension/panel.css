@@ -1,0 +1,385 @@
+:root {
+  color-scheme: dark;
+  --bg: #101614;
+  --card: #18211e;
+  --line: #2a3a34;
+  --text: #e7f2ec;
+  --muted: #8ea399;
+  --accent: #3ecf8e;
+  --accent-ink: #062117;
+  --danger: #f07178;
+  --ok: #3ecf8e;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+  font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  padding: 18px 16px 24px;
+  background:
+    radial-gradient(1200px 240px at 10% -10%, rgba(62, 207, 142, 0.16), transparent 55%),
+    var(--bg);
+  color: var(--text);
+}
+
+.top {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 30% 32%, #fff 0 3px, transparent 3.5px),
+    radial-gradient(circle at 70% 32%, #fff 0 3px, transparent 3.5px),
+    radial-gradient(circle at 50% 72%, #d9ffe9 0 3.5px, transparent 4px),
+    linear-gradient(160deg, #1c8f68, #0e3d2e);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.kicker {
+  margin: 0;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+h1,
+h2 {
+  margin: 0;
+  font-weight: 650;
+}
+
+h1 {
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+form {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 9px 10px;
+  background: #0e1513;
+  color: var(--text);
+  font: 13px/1.4 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+input:focus {
+  outline: 2px solid rgba(62, 207, 142, 0.45);
+  border-color: #2f8f66;
+}
+
+.token-row {
+  display: flex;
+  gap: 8px;
+}
+
+.actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+button {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 12px;
+  background: #22302a;
+  color: var(--text);
+  font: 600 13px/1.2 inherit;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: #3d5c4e;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+button.primary,
+#responses {
+  min-width: 160px;
+  padding: 14px 36px;
+  border-radius: 12px;
+  font-size: 16px;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--accent-ink);
+}
+
+button.ghost {
+  background: transparent;
+  padding: 8px 10px;
+  white-space: nowrap;
+}
+
+.status {
+  min-height: 1.2em;
+  margin: 10px 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.status.error {
+  color: var(--danger);
+}
+
+.results-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+h2 {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.results-actions {
+  display: flex;
+  gap: 4px;
+}
+
+#output {
+  display: grid;
+  gap: 10px;
+}
+
+.empty {
+  margin: 0;
+  padding: 18px 14px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.card {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #0e1513;
+}
+
+.card.ok {
+  border-color: #1f6b4b;
+}
+
+.card.bad {
+  border-color: #7a3036;
+}
+
+.card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: #15201c;
+}
+
+.card h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.meta {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  word-break: break-all;
+}
+
+.badge {
+  align-self: flex-start;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.badge.ok {
+  background: rgba(62, 207, 142, 0.16);
+  color: var(--ok);
+}
+
+.badge.bad {
+  background: rgba(240, 113, 120, 0.16);
+  color: var(--danger);
+}
+
+pre {
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  max-height: 480px;
+  font: 12px/1.5 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.detail {
+  display: grid;
+  gap: 16px;
+  padding: 14px;
+}
+
+.goal-head .label {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.goal-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.goal-sub {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.chip {
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.chip.on {
+  background: rgba(62, 207, 142, 0.16);
+  color: var(--ok);
+}
+
+.chip.off {
+  background: rgba(142, 163, 153, 0.12);
+  color: var(--muted);
+}
+
+.button-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.button-item {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #121a17;
+}
+
+.button-label {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.block h4 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.fields {
+  display: grid;
+  gap: 10px;
+}
+
+.field {
+  display: grid;
+  gap: 2px;
+}
+
+.label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.value,
+.prose {
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.prose {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.problems {
+  margin: 0;
+  padding: 12px 12px 12px 28px;
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.problems li + li {
+  margin-top: 8px;
+}

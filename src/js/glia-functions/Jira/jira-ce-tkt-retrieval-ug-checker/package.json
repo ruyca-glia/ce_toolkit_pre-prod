@@ -1,0 +1,15 @@
+{
+  "name": "jira-ce-tkt-retrieval-ug-checker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild jira_ce_tkt_retrieval_ug_checker.js --bundle --format=esm --target=es2020 --outfile=function-out.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.699.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}
